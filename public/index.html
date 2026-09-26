@@ -315,7 +315,7 @@ const HEROES = {
   knight: { name: '기사',   desc: '튼튼한 체력과 방패. 검 · 창 · 둔기를 씁니다.', hpMul: 1.25, atkMul: 1.0,  speed: 70, mp: 40, mpRegen: 2.5,
             look: { torso: '#5a6a88', legs: '#3a3a4a', feet: '#3a2a1a' },
             start: { weapon: 'wood_sword', shield: 'wood_shield', armor: 'cloth_tunic' } },
-  rogue:  { name: '궁수',   noShield: true, desc: '빠른 발. 활 · 석궁으로 거리를 벌리며 싸웁니다. (방패 사용 불가)',   hpMul: 0.9,  atkMul: 1.05, speed: 82, mp: 50, mpRegen: 3,
+  rogue:  { name: '궁수',   noShield: true, desc: '빠른 발. 활 · 석궁으로 거리를 벌리며 싸웁니다. (방패 사용 불가)',   hpMul: 0.9,  atkMul: 0.95, speed: 82, mp: 50, mpRegen: 3,
             look: { torso: '#3e5a32', legs: '#4a3a28', feet: '#2a2018' },
             start: { weapon: 'hunter_bow', boots: 'sandals' } },
   wizard: { name: '마법사', noShield: true, desc: '지팡이 · 완드로 마법을 씁니다. 마나가 많아요. (방패 사용 불가)',    hpMul: 0.85, atkMul: 1.2,  speed: 70, mp: 80, mpRegen: 4.5,
@@ -1066,14 +1066,14 @@ const MOVES = {
     { anim: 'smash',  dur: 0.62, hit: 0.55, shape: 'circle', mult: 2.0, kb: 280, lunge: 6, finisher: true, quake: true },
   ],
   bow: [
-    { anim: 'thrust', dur: 0.3,  hit: 0.45, shape: 'shot',   mult: 1.0, kb: 60, proj: 'arrow' },
-    { anim: 'thrust', dur: 0.3,  hit: 0.45, shape: 'shot',   mult: 1.0, kb: 60, proj: 'arrow' },
-    { anim: 'thrust', dur: 0.4,  hit: 0.45, shape: 'shot',   mult: 1.0, kb: 90, proj: 'arrow', spread: 3, finisher: true },
+    { anim: 'thrust', dur: 0.3,  hit: 0.45, shape: 'shot',   mult: 0.75, kb: 60, proj: 'arrow' },          // v40 궁수 너프 (1.0 → 0.75)
+    { anim: 'thrust', dur: 0.3,  hit: 0.45, shape: 'shot',   mult: 0.75, kb: 60, proj: 'arrow' },
+    { anim: 'thrust', dur: 0.4,  hit: 0.45, shape: 'shot',   mult: 0.5,  kb: 90, proj: 'arrow', spread: 3, finisher: true },   // 3발 × 0.5
   ],
   xbow: [                                              // 석궁: 느리고 강한 관통 화살
-    { anim: 'thrust', dur: 0.55, hit: 0.5,  shape: 'shot',   mult: 1.9, kb: 150, proj: 'arrow', pierce: 2, speed: 340 },
-    { anim: 'thrust', dur: 0.55, hit: 0.5,  shape: 'shot',   mult: 1.9, kb: 150, proj: 'arrow', pierce: 2, speed: 340 },
-    { anim: 'thrust', dur: 0.7,  hit: 0.5,  shape: 'shot',   mult: 2.8, kb: 240, proj: 'arrow', pierce: 4, speed: 380, finisher: true },
+    { anim: 'thrust', dur: 0.55, hit: 0.5,  shape: 'shot',   mult: 1.5, kb: 150, proj: 'arrow', pierce: 2, speed: 340 },   // v40 너프 (1.9 → 1.5)
+    { anim: 'thrust', dur: 0.55, hit: 0.5,  shape: 'shot',   mult: 1.5, kb: 150, proj: 'arrow', pierce: 2, speed: 340 },
+    { anim: 'thrust', dur: 0.7,  hit: 0.5,  shape: 'shot',   mult: 2.2, kb: 240, proj: 'arrow', pierce: 4, speed: 380, finisher: true },
   ],
   wand: [                                              // 완드: 빠르고 가벼운 마법탄
     { anim: 'thrust', dur: 0.24, hit: 0.4,  shape: 'shot',   mult: 0.75, kb: 50, proj: 'bolt', spr: 'water_arrow', color: '#8fe0ff' },
@@ -2738,10 +2738,10 @@ const SKILLS = {
     { id: 'earthquake', name: '대지 강타',   icon: '💥', img: 3, lv: 10, mp: 30, cd: 14, anim: 'smash',  dur: 0.62, hit: 0.55, desc: '땅을 내리쳐 앞쪽 넓은 범위에 큰 피해 + 경직 (공격력 ×3.2)' },
   ],
   rogue: [
-    { id: 'multishot',  name: '연발 사격',   icon: '🏹', eimg: 3, lv: 1,  mp: 12, cd: 4,  anim: 'thrust', dur: 0.35, hit: 0.45, desc: '부채꼴로 화살 5발을 한꺼번에 쏩니다 (발당 공격력 ×0.9)' },
-    { id: 'pierce',     name: '관통 화살',   icon: '➶', eimg: 0, lv: 3,  mp: 15, cd: 6,  anim: 'thrust', dur: 0.5,  hit: 0.5,  desc: '일직선의 모든 적을 꿰뚫는 강한 화살 (공격력 ×2.6)' },
+    { id: 'multishot',  name: '연발 사격',   icon: '🏹', eimg: 3, lv: 1,  mp: 12, cd: 4,  anim: 'thrust', dur: 0.35, hit: 0.45, desc: '부채꼴로 화살 5발을 한꺼번에 쏩니다 (발당 공격력 ×0.6)' },
+    { id: 'pierce',     name: '관통 화살',   icon: '➶', eimg: 0, lv: 3,  mp: 15, cd: 6,  anim: 'thrust', dur: 0.5,  hit: 0.5,  desc: '일직선의 모든 적을 꿰뚫는 강한 화살 (공격력 ×2.0)' },
     { id: 'wind_step',  name: '바람 걸음',   icon: '💨', eimg: 4, lv: 6,  mp: 18, cd: 14, anim: 'run',    dur: 0.22, hit: 0,    desc: '뒤로 크게 물러나고 6초 동안 이동 속도 +30% · 공격 속도 +30%' },
-    { id: 'arrow_rain', name: '화살비',      icon: '🌧️', eimg: 5, lv: 10, mp: 30, cd: 14, anim: 'thrust', dur: 0.45, hit: 0.5,  desc: '조준한 곳에 1.2초 동안 화살비를 퍼붓습니다 (6번 × 공격력 ×0.9)' },
+    { id: 'arrow_rain', name: '화살비',      icon: '🌧️', eimg: 5, lv: 10, mp: 30, cd: 14, anim: 'thrust', dur: 0.45, hit: 0.5,  desc: '조준한 곳에 1.2초 동안 화살비를 퍼붓습니다 (6번 × 공격력 ×0.6)' },
   ],
   wizard: [
     { id: 'fireball',   name: '화염구',      icon: '🔥', mimg: 3, lv: 1,  mp: 14, cd: 3,  anim: 'thrust', dur: 0.4,  hit: 0.45, desc: '닿으면 폭발하는 불덩이 (주변 공격력 ×2.2)' },
@@ -2876,13 +2876,13 @@ const SKILL_FX = {
   // ---------------- 궁수
   multishot: {
     start(p, game) {
-      for (let i = 0; i < 5; i++) { const { dmg, crit } = p.rollDmg(0.9); game.projectiles.push(new Projectile({ x: p.x, y: p.y, z: 10, angle: p.aim + (i - 2) * 0.16, speed: 280, dmg, crit, kb: 70, kind: 'arrow', r: 3.5, life: 0.8 })); }
+      for (let i = 0; i < 5; i++) { const { dmg, crit } = p.rollDmg(0.6); game.projectiles.push(new Projectile({ x: p.x, y: p.y, z: 10, angle: p.aim + (i - 2) * 0.16, speed: 280, dmg, crit, kb: 70, kind: 'arrow', r: 3.5, life: 0.8 })); }
       sfx.shoot();
     },
   },
   pierce: {
     start(p, game) {
-      const { dmg, crit } = p.rollDmg(2.6);
+      const { dmg, crit } = p.rollDmg(2.0);
       game.projectiles.push(new Projectile({ x: p.x, y: p.y, z: 10, angle: p.aim, speed: 430, dmg, crit, kb: 180, kind: 'arrow', spr: 'fire_arrow', r: 3.5, life: 1.0, pierce: 99, color: '#ffb040' }));
       online.act({ k: 'shot', aim: p.aim, n: 1, proj: 'arrow', spr: 'fire_arrow', color: '#ffb040', speed: 430 });
       game.burst(p.x + Math.cos(p.aim) * 10, p.y - 10, '#fff2a0', 10); sfx.shoot();
@@ -2899,7 +2899,7 @@ const SKILL_FX = {
       const c = skills.aimPoint(p, game, 140);
       skills.zones.push({ x: c.x, y: c.y, t: 0, n: 0, next: 0.15,
         tick(z, dt, game) {
-          if (z.t >= z.next && z.n < 6) { z.n++; z.next += 0.2; const hx = z.x + (Math.random() - 0.5) * 16, hy = z.y + (Math.random() - 0.5) * 10; skillAoe(game, hx, hy, 40, () => p.rollDmg(0.9), 60, '#fff2a0'); for (let j = 0; j < 3; j++) mfx(game, 'splash', hx + (Math.random() - 0.5) * 60, hy + (Math.random() - 0.5) * 24, { s: 0.7, dur: 0.3, share: true }); sfx.shoot(); }
+          if (z.t >= z.next && z.n < 6) { z.n++; z.next += 0.2; const hx = z.x + (Math.random() - 0.5) * 16, hy = z.y + (Math.random() - 0.5) * 10; skillAoe(game, hx, hy, 40, () => p.rollDmg(0.6), 60, '#fff2a0'); for (let j = 0; j < 3; j++) mfx(game, 'splash', hx + (Math.random() - 0.5) * 60, hy + (Math.random() - 0.5) * 24, { s: 0.7, dur: 0.3, share: true }); sfx.shoot(); }
           if (z.t > 1.5) z.dead = true;
         },
         draw(ctx, z, game) {
@@ -3157,10 +3157,10 @@ SKILLS.knight.push(
   { id: 'blade_storm', name: '칼날 폭풍',     icon: '🌪️', draw: 1, lv: 18, mp: 40, cd: 18, anim: 'idle',   dur: 2.5,  hit: 0,    desc: '2.5초 동안 칼날이 몸 주위를 돌며 계속 벱니다. 움직일 수 있음 (0.25초마다 공격력 ×0.9)' },
 );
 SKILLS.rogue.push(
-  { id: 'poison_arrow',    name: '독 화살',     icon: '☠️', draw: 1, lv: 8,  mp: 16, cd: 8,  anim: 'thrust', dur: 0.4,  hit: 0.45, desc: '맞은 곳에 4초 동안 독 안개가 퍼집니다 (0.5초마다 공격력 ×0.55 · 느려짐)' },
-  { id: 'spike_trap',      name: '가시 덫',     icon: '🪤', draw: 1, lv: 12, mp: 18, cd: 10, anim: 'smash',  dur: 0.4,  hit: 0.5,  desc: '조준한 곳에 덫을 놓습니다. 적이 밟으면 터져 주변에 큰 피해 + 2초 묶음 (공격력 ×3.0 · 20초 유지)' },
-  { id: 'shadow_step',     name: '그림자 도약', icon: '👤', draw: 1, lv: 15, mp: 20, cd: 10, anim: 'thrust', dur: 0.25, hit: 0,    desc: '가까운 적의 등 뒤로 순간 이동해 찌르고, 4초 동안 치명타 +60%' },
-  { id: 'explosive_arrow', name: '폭발 화살',   icon: '💣', draw: 1, lv: 18, mp: 32, cd: 12, anim: 'thrust', dur: 0.5,  hit: 0.5,  desc: '맞으면 크게 폭발하는 화살 (넓은 범위 공격력 ×3.2)' },
+  { id: 'poison_arrow',    name: '독 화살',     icon: '☠️', draw: 1, lv: 8,  mp: 16, cd: 8,  anim: 'thrust', dur: 0.4,  hit: 0.45, desc: '맞은 곳에 4초 동안 독 안개가 퍼집니다 (0.5초마다 공격력 ×0.4 · 느려짐)' },
+  { id: 'spike_trap',      name: '가시 덫',     icon: '🪤', draw: 1, lv: 12, mp: 18, cd: 10, anim: 'smash',  dur: 0.4,  hit: 0.5,  desc: '조준한 곳에 덫을 놓습니다. 적이 밟으면 터져 주변에 큰 피해 + 2초 묶음 (공격력 ×2.4 · 20초 유지)' },
+  { id: 'shadow_step',     name: '그림자 도약', icon: '👤', draw: 1, lv: 15, mp: 20, cd: 10, anim: 'thrust', dur: 0.25, hit: 0,    desc: '가까운 적의 등 뒤로 순간 이동해 찌르고, 4초 동안 치명타 +35%' },
+  { id: 'explosive_arrow', name: '폭발 화살',   icon: '💣', draw: 1, lv: 18, mp: 32, cd: 12, anim: 'thrust', dur: 0.5,  hit: 0.5,  desc: '맞으면 크게 폭발하는 화살 (넓은 범위 공격력 ×2.5)' },
 );
 SKILLS.wizard.push(
   { id: 'thunder',     name: '낙뢰',       icon: '⚡', draw: 1, lv: 8,  mp: 18, cd: 5,  anim: 'thrust', dur: 0.4,  hit: 0.45, desc: '조준한 적에게 번개가 내리꽂히고 주변 3명에게 옮겨 갑니다 (공격력 ×2.4 → ×1.4)' },
@@ -3219,7 +3219,7 @@ Object.assign(SKILL_FX, {
         onBoom(pr, game) {
           const x = pr.x, y = pr.y; skillAoe(game, x, y, 10, () => ({ dmg: pr.dmg, crit: pr.crit }), 60, '#7ad84a');
           vfx(game, 'cloud', { x, y, r: 34, dur: 4 }, true);
-          skills.zones.push({ t: 0, acc: 0, tick(z, dt, game) { if ((z.acc += dt) >= 0.5) { z.acc -= 0.5; for (const m of nearMonsters(game, x, y, 36, 99)) { const r = p.rollDmg(0.55); m.hurt(r.dmg, 0, 0, game, r.crit, 0); m.slowT = Math.max(m.slowT || 0, 0.7); } } if (z.t > 4) z.dead = true; }, draw() {} });
+          skills.zones.push({ t: 0, acc: 0, tick(z, dt, game) { if ((z.acc += dt) >= 0.5) { z.acc -= 0.5; for (const m of nearMonsters(game, x, y, 36, 99)) { const r = p.rollDmg(0.4); m.hurt(r.dmg, 0, 0, game, r.crit, 0); m.slowT = Math.max(m.slowT || 0, 0.7); } } if (z.t > 4) z.dead = true; }, draw() {} });
         } }));
       online.act({ k: 'shot', aim: p.aim, n: 1, proj: 'arrow', speed: 280 }); sfx.shoot();
     },
@@ -3233,7 +3233,7 @@ Object.assign(SKILL_FX, {
         if (m) {
           z.dead = true; if (v) v.t = 0;
           vfx(game, 'snap', { x: c.x, y: c.y, dur: 0.45, tid }, true); game.shake(4); sfx.hit();
-          skillAoe(game, c.x, c.y, 28, () => p.rollDmg(3.0), 120, '#ffd060', (e) => { e.stagger = Math.max(e.stagger || 0, 2); });
+          skillAoe(game, c.x, c.y, 28, () => p.rollDmg(2.4), 120, '#ffd060', (e) => { e.stagger = Math.max(e.stagger || 0, 2); });
         }
         if (z.t > 20) z.dead = true; }, draw() {} });
     },
@@ -3248,7 +3248,7 @@ Object.assign(SKILL_FX, {
         const { dmg, crit } = p.rollDmg(1.5); m.hurt(dmg, Math.cos(a), Math.sin(a), game, crit, 120);
       } else { const c = skills.aimPoint(p, game, 60); if (!game.world.blocked(c.x, c.y, p.r)) { p.x = c.x; p.y = c.y; } }
       p.inv_t = Math.max(p.inv_t, 0.35);
-      p.addSkillBuff('sk_shadow', '그림자 도약', '👤', 4, { crit: 60 }, game);
+      p.addSkillBuff('sk_shadow', '그림자 도약', '👤', 4, { crit: 35 }, game);
       vfx(game, 'shadow', { x: x0, y: y0, x2: p.x, y2: p.y, dur: 0.45 }, true); sfx.swing();
     },
   },
@@ -3256,7 +3256,7 @@ Object.assign(SKILL_FX, {
     start(p, game) {
       game.projectiles.push(new Projectile({ x: p.x, y: p.y, z: 10, angle: p.aim, speed: 300, dmg: 0, kind: 'arrow', r: 3.5, life: 0.8, boom: 48, color: '#ff8a2a',
         onTick(pr, dt, game) { if (Math.random() < 0.8) game.fx.push({ k: 'p', x: pr.x, y: pr.y - pr.z, vx: (Math.random() - 0.5) * 20, vy: -12, t: 0.25, color: Math.random() < 0.5 ? '#ffb040' : '#ff5020' }); },
-        onBoom(pr, game) { skillAoe(game, pr.x, pr.y, 48, () => p.rollDmg(3.2), 260, '#ff8a2a'); vfx(game, 'explo', { x: pr.x, y: pr.y, r: 44, dur: 0.75 }, true); game.shake(8); sfx.hit(); } }));
+        onBoom(pr, game) { skillAoe(game, pr.x, pr.y, 48, () => p.rollDmg(2.5), 260, '#ff8a2a'); vfx(game, 'explo', { x: pr.x, y: pr.y, r: 44, dur: 0.75 }, true); game.shake(8); sfx.hit(); } }));
       online.act({ k: 'shot', aim: p.aim, n: 1, proj: 'arrow', speed: 300 }); sfx.shoot();
     },
   },
