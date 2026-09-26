@@ -47,7 +47,8 @@
       sock.on('worldOp', (m) => this.fire('worldOp', m));
       sock.on('worldSync', (m) => this.fire('worldSync', m));
       sock.on('host', (h) => { this.hostId = h; this.fire('host', h); });
-      sock.on('rates', (r) => this.fire('rates', r));                  // 서버 배율 (관리자가 바꾸면 모두에게)
+      sock.on('rates', (r) => this.fire('rates', r));
+      for (const ev of ['party', 'partyInvite', 'partyMsg', 'partyAct']) sock.on(ev, (m) => this.fire(ev, m));   // 파티                  // 서버 배율 (관리자가 바꾸면 모두에게)
     }
     get isHost() { return this.ok && this.id && this.id === this.hostId; }
     fire(type, data) { (this.handlers[type] || []).forEach((f) => f(data)); }
@@ -65,6 +66,8 @@
     action(d) { if (this.ok) this.sock.emit('action', d); }
     world(op) { if (this.ok) this.sock.emit('world', op); }
     sync(d) { if (this.isHost) this.sock.emit('sync', d); }
+    /** 파티: party:invite · accept · decline · leave · kick · act → cb({ ok, msg }) */
+    partyEmit(ev, d, cb) { if (!this.ok) return cb && cb({ ok: false, msg: '서버에 연결돼 있지 않아요' }); if (!cb) { this.sock.emit(ev, d); return; } this.sock.timeout(5000).emit(ev, d, (err, res) => cb(err ? { ok: false, msg: '서버 응답이 없어요' } : res || { ok: true })); }
     /** 관리자 로그인 (서버가 ADMIN_PASSWORD 확인) → cb({ ok, msg }) */
     adminAuth(pass, cb) { if (!this.ok) return cb && cb({ ok: false, msg: '서버에 연결돼 있지 않아요' }); this.sock.timeout(6000).emit('adminAuth', { pass }, (err, res) => cb && cb(err ? { ok: false, msg: '서버 응답이 없어요' } : res)); }
     /** 관리자: 서버 배율 바꾸기 → cb({ ok, msg }) */

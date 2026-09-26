@@ -17,6 +17,7 @@
 //   action      공격 · 스킬 · 채집 · 농사 · 건축 같은 한 번짜리 행동 → 'playerAction'
 //   world       건축 · 농사로 바뀐 월드 (서버가 저장)             → 'worldOp'
 //   sync        호스트(가장 먼저 온 사람)가 5초마다 보내는 밭 · 시계 → 'worldSync'
+//   party:*     파티 (초대 · 수락 · 거절 · 나가기 · 추방 · 파티원끼리 행동: 경험치 공유 · 치유 · 버프 · 파티 채팅) — 최대 5명
 //   adminAuth   관리자 창 열기 (주소에 ?admin · 서버 비밀번호 확인)
 //   setRates    관리자 비밀번호 + 서버 배율(경험치 · 골드 · 드롭 …) → 저장하고 모두에게 'rates' (접속한 모든 사람에게 적용)
 //   disconnect  나감                                               → 'playerLeft'
@@ -42,7 +43,7 @@ function cleanRates(r) {
 
 const app = express();
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'], maxAge: 0 }));
-app.get('/status', (req, res) => res.json({ players: players.size, host: hostId, rates: world.rates }));
+app.get('/status', (req, res) => res.json({ players: players.size, parties: parties.size, host: hostId, rates: world.rates }));
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' },                 // 게임을 다른 곳(Vercel 등)에 올려도 접속 가능
@@ -132,7 +133,30 @@ function applyOp(op) {
 }
 
 // ---------------------------------------------------------------- 접속자
-const players = new Map();            // id → { name, state, joinedAt }
+const players = new Map();            // id → { name, state, joinedAt, party, invites }
+
+// ---------------------------------------------------------------- 파티 (서버 메모리 · 다시 켜면 없어짐)
+const PARTY_MAX = 5;
+const parties = new Map();            // 파티 id → { leader, members: Set }
+let partyNo = 1;
+function partyInfo(pid) {
+  const P = parties.get(pid); if (!P) return null;
+  return { id: pid, leader: P.leader, members: [...P.members].map((id) => ({ id, name: (players.get(id) || {}).name || '?' })) };
+}
+function sendParty(pid) { const info = partyInfo(pid); if (info) for (const m of parties.get(pid).members) io.to(m).emit('party', info); }
+function partyMsg(pid, text, except) { const P = parties.get(pid); if (P) for (const m of P.members) if (m !== except) io.to(m).emit('partyMsg', text); }
+function leaveParty(id, kicked) {
+  const p = players.get(id), pid = p && p.party, P = pid && parties.get(pid); if (!P) return;
+  P.members.delete(id); p.party = null; io.to(id).emit('party', null);
+  if (kicked) io.to(id).emit('partyMsg', '파티에서 추방됐어요');
+  if (P.members.size <= 1) {                                    // 혼자 남으면 해산
+    for (const m of P.members) { const q = players.get(m); if (q) q.party = null; io.to(m).emit('party', null); io.to(m).emit('partyMsg', '파티가 해산됐어요'); }
+    parties.delete(pid); return;
+  }
+  if (P.leader === id) P.leader = [...P.members][0];
+  partyMsg(pid, `${p.name}님이 파티를 ${kicked ? '떠나게 됐어요 (추방)' : '떠났어요'}`);
+  sendParty(pid);
+}
 let hostId = null, guestNo = 1;
 function pickHost() {
   const first = [...players.entries()].filter(([, p]) => p.state).sort((a, b) => a[1].joinedAt - b[1].joinedAt)[0];
@@ -147,7 +171,7 @@ function limiter(n) { let t = Date.now(), c = 0; return () => { const now = Date
 io.on('connection', (sock) => {
   if (players.size >= MAX_PLAYERS) { sock.emit('full', MAX_PLAYERS); sock.disconnect(true); return; }
   const id = sock.id, guest = '모험가' + String(guestNo++).padStart(3, '0');
-  players.set(id, { name: guest, state: null, joinedAt: Date.now() });
+  players.set(id, { name: guest, state: null, joinedAt: Date.now(), party: null, invites: new Map() });
   const others = {}; for (const [k, p] of players) if (k !== id && p.state) others[k] = p.state;
   sock.emit('welcome', { id, guest, host: hostId, players: others, world: snapshot(), rates: world.rates });
   log(`접속 ${guest} ${id} (현재 ${players.size}명)`);
@@ -161,7 +185,8 @@ io.on('connection', (sock) => {
   });
   sock.on('move', (d) => {
     if (!okMove() || !stateOk(d)) return; const p = players.get(id); if (!p) return;
-    p.state = d; sock.broadcast.volatile.emit('playerMoved', { id, d });
+    p.state = d; if (typeof d.name === 'string' && d.name.trim() && p.name !== d.name.slice(0, 16)) { p.name = d.name.slice(0, 16); if (p.party) sendParty(p.party); }   // 캐릭터 이름 (파티 목록용)
+    sock.broadcast.volatile.emit('playerMoved', { id, d });
     if (!hostId) pickHost();
   });
   sock.on('action', (d) => { if (okAct() && stateOk(d)) sock.broadcast.emit('playerAction', { id, d }); });
@@ -178,6 +203,50 @@ io.on('connection', (sock) => {
     dirty = true;
     sock.broadcast.emit('worldSync', { farm: Object.values(world.farm), efarm: Object.values(world.efarm), clock: world.clock });
   });
+  // ---- 파티
+  const okParty = limiter(6), okPAct = limiter(15);
+  const ackOf = (a) => (typeof a === 'function' ? a : () => {});
+  sock.on('party:invite', (d, ack) => {
+    const reply = ackOf(ack), me = players.get(id), to = d && typeof d.to === 'string' ? d.to : '', them = players.get(to);
+    if (!okParty() || !me) return reply({ ok: false, msg: '잠시 뒤 다시 해 주세요' });
+    if (!them || !them.state || to === id) return reply({ ok: false, msg: '그 사람을 찾을 수 없어요' });
+    if (them.party && them.party === me.party) return reply({ ok: false, msg: '이미 같은 파티예요' });
+    if (them.party) return reply({ ok: false, msg: `${them.name}님은 이미 다른 파티에 있어요` });
+    const P = me.party && parties.get(me.party);
+    if (P && P.leader !== id) return reply({ ok: false, msg: '파티장만 초대할 수 있어요' });
+    if (P && P.members.size >= PARTY_MAX) return reply({ ok: false, msg: `파티는 최대 ${PARTY_MAX}명이에요` });
+    them.invites.set(id, Date.now());
+    io.to(to).emit('partyInvite', { from: id, name: me.name });
+    reply({ ok: true, msg: `${them.name}님에게 파티 초대를 보냈어요` });
+  });
+  sock.on('party:accept', (d, ack) => {
+    const reply = ackOf(ack), me = players.get(id), from = d && typeof d.from === 'string' ? d.from : '', inviter = players.get(from);
+    if (!okParty() || !me) return reply({ ok: false });
+    const t = me.invites.get(from); me.invites.delete(from);
+    if (!t || Date.now() - t > 60000 || !inviter) return reply({ ok: false, msg: '초대가 만료됐어요' });
+    if (me.party) return reply({ ok: false, msg: '먼저 지금 파티에서 나가 주세요' });
+    let pid = inviter.party;
+    if (!pid) { pid = 'p' + partyNo++; parties.set(pid, { leader: from, members: new Set([from]) }); inviter.party = pid; }
+    const P = parties.get(pid);
+    if (P.members.size >= PARTY_MAX) return reply({ ok: false, msg: '파티가 가득 찼어요' });
+    P.members.add(id); me.party = pid;
+    partyMsg(pid, `${me.name}님이 파티에 들어왔어요`, id);
+    sendParty(pid); reply({ ok: true });
+  });
+  sock.on('party:decline', (d) => { const me = players.get(id), from = d && typeof d.from === 'string' ? d.from : ''; if (!me || !me.invites.delete(from)) return; io.to(from).emit('partyMsg', `${me.name}님이 파티 초대를 거절했어요`); });
+  sock.on('party:leave', () => { if (okParty()) leaveParty(id); });
+  sock.on('party:kick', (d) => {
+    const me = players.get(id), P = me && me.party && parties.get(me.party), who = d && typeof d.id === 'string' ? d.id : '';
+    if (!okParty() || !P || P.leader !== id || who === id || !P.members.has(who)) return;
+    leaveParty(who, true);
+  });
+  sock.on('party:act', (d) => {                        // 파티원끼리만: 경험치 공유 · 치유 · 버프 · 파티 채팅
+    const me = players.get(id), P = me && me.party && parties.get(me.party);
+    if (!P || !okPAct() || !d || typeof d !== 'object') return;
+    try { if (JSON.stringify(d).length > 600) return; } catch (e) { return; }
+    for (const m of P.members) if (m !== id) io.to(m).emit('partyAct', { id, d });
+  });
+
   let authFails = 0;
   sock.on('adminAuth', (d, ack) => {                   // 관리자 창 열기 (서버 주인만 · 비밀번호는 서버만 앎)
     const reply = typeof ack === 'function' ? ack : () => {};
@@ -196,6 +265,7 @@ io.on('connection', (sock) => {
     reply({ ok: true });
   });
   sock.on('disconnect', () => {
+    leaveParty(id);
     const p = players.get(id); players.delete(id);
     io.emit('playerLeft', { id });
     log(`나감 ${p ? p.name : id} (현재 ${players.size}명)`);
