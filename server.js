@@ -18,6 +18,8 @@
 //   world       건축 · 농사로 바뀐 월드 (서버가 저장)             → 'worldOp'
 //   sync        호스트(가장 먼저 온 사람)가 5초마다 보내는 밭 · 시계 → 'worldSync'
 //   party:*     파티 (초대 · 수락 · 거절 · 나가기 · 추방 · 파티원끼리 행동: 경험치 공유 · 치유 · 버프 · 파티 채팅) — 최대 5명
+//   관리자 페이지  https://내주소/admin  (admin.html · 비밀번호 = ADMIN_PASSWORD)
+//               접속자 목록 · 서버 배율 · 시즌 초기화(모든 캐릭터 삭제) · 공지 · 강퇴  → /api/admin/* (헤더 x-admin-pass)
 //   adminAuth   관리자 창 열기 (주소에 ?admin · 서버 비밀번호 확인)
 //   setRates    관리자 비밀번호 + 서버 배율(경험치 · 골드 · 드롭 …) → 저장하고 모두에게 'rates' (접속한 모든 사람에게 적용)
 //   disconnect  나감                                               → 'playerLeft'
@@ -36,6 +38,8 @@ const SEASON = String(process.env.SEASON || '').slice(0, 20);          // ◀ �
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '1234';           // ◀ 서버 배율을 바꿀 때 쓰는 관리자 비밀번호 (Render 환경 변수 ADMIN_PASSWORD 로 바꾸세요)
 const RATE_KEYS = ['xp', 'gold', 'drop', 'gather', 'enh', 'elite', 'respawn'];
 /** 서버 배율 검사: 알려진 키 · 0.1 ~ 100 */
+/** 시즌 = 환경 변수 SEASON + 관리자 페이지에서 초기화한 시각(t) — 둘 중 하나라도 새로우면 접속자의 캐릭터가 지워짐 */
+function seasonInfo() { return { env: SEASON, t: Number(world.seasonT) || 0 }; }
 function cleanRates(r) {
   const o = {}; if (!r || typeof r !== 'object') return null;
   for (const k of RATE_KEYS) { const v = Number(r[k]); o[k] = isFinite(v) && v >= 0.1 && v <= 100 ? Math.round(v * 10) / 10 : 1; }
@@ -44,7 +48,58 @@ function cleanRates(r) {
 
 const app = express();
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'], maxAge: 0 }));
-app.get('/status', (req, res) => res.json({ players: players.size, parties: parties.size, host: hostId, rates: world.rates, season: SEASON || null }));
+app.get('/status', (req, res) => res.json({ players: players.size, parties: parties.size, host: hostId, rates: world.rates, season: seasonInfo() }));
+const startedAt = Date.now();
+
+// ---------------------------------------------------------------- 관리자 페이지 (/admin)
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'admin.html')));
+app.use('/api/admin', express.json({ limit: '8kb' }));
+const loginFails = new Map();                                   // IP → { n, t } (10분에 8번까지)
+function adminOk(req, res) {
+  const ip = String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim(), f = loginFails.get(ip) || { n: 0, t: Date.now() };
+  if (Date.now() - f.t > 600000) { f.n = 0; f.t = Date.now(); }
+  if (f.n >= 8) { res.status(429).json({ ok: false, msg: '너무 많이 틀렸어요. 10분 뒤 다시 해 주세요' }); return false; }
+  if (req.headers['x-admin-pass'] !== ADMIN_PASSWORD) { f.n++; loginFails.set(ip, f); log(`관리자 페이지 로그인 실패 ${ip} (${f.n}회)`); res.status(401).json({ ok: false, msg: '비밀번호가 틀렸어요' }); return false; }
+  loginFails.delete(ip); return true;
+}
+app.get('/api/admin/state', (req, res) => {
+  if (!adminOk(req, res)) return;
+  const list = [...players.entries()].map(([id, p]) => {
+    const s = p.state || {};
+    return { id, name: p.name, cls: s.cls || null, lv: s.lv || null, map: s.map || null, hp: typeof s.hp === 'number' ? s.hp : null, party: p.party, host: id === hostId, since: p.joinedAt };
+  });
+  res.json({ ok: true, players: list, max: MAX_PLAYERS, parties: [...parties.keys()].map(partyInfo), rates: world.rates, season: seasonInfo(), uptime: Date.now() - startedAt,
+    world: { tiles: Object.keys(world.tiles).length, furn: world.furn.length, farm: Object.keys(world.farm).length + Object.keys(world.efarm).length } });
+});
+app.post('/api/admin/rates', (req, res) => {
+  if (!adminOk(req, res)) return;
+  const r = cleanRates(req.body && req.body.rates); if (!r) return res.json({ ok: false, msg: '배율 값이 이상해요' });
+  world.rates = r; dirty = true; io.emit('rates', r); log(`서버 배율 변경 (관리자 페이지) ${JSON.stringify(r)}`);
+  res.json({ ok: true, rates: r });
+});
+app.post('/api/admin/notice', (req, res) => {
+  if (!adminOk(req, res)) return;
+  const text = String((req.body && req.body.text) || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 120);
+  if (!text) return res.json({ ok: false, msg: '공지 내용을 적어 주세요' });
+  io.emit('notice', { text }); log(`공지: ${text}`); res.json({ ok: true });
+});
+app.post('/api/admin/kick', (req, res) => {
+  if (!adminOk(req, res)) return;
+  const id = String((req.body && req.body.id) || ''), s = io.sockets.sockets.get(id);
+  if (!s) return res.json({ ok: false, msg: '그 접속자가 없어요' });
+  const name = (players.get(id) || {}).name || id;
+  s.emit('kicked', { msg: String((req.body && req.body.msg) || '').slice(0, 80) }); setTimeout(() => s.disconnect(true), 300);
+  log(`강퇴: ${name}`); res.json({ ok: true, msg: `${name}님을 내보냈어요` });
+});
+app.post('/api/admin/season', (req, res) => {                  // 시즌 초기화: 모든 캐릭터 삭제 + 공용 월드 처음으로
+  if (!adminOk(req, res)) return;
+  world = { tiles: {}, stations: {}, furn: [], rooms: {}, roof: 'wood', farm: {}, efarm: {}, clock: null, v: 1, rates: world.rates, seasonT: Date.now() };
+  dirty = true; saveWorld();
+  for (const pid of [...parties.keys()]) for (const m of parties.get(pid).members) { const q = players.get(m); if (q) q.party = null; }
+  parties.clear();
+  io.emit('season', seasonInfo()); log(`시즌 초기화 ${JSON.stringify(seasonInfo())}`);
+  res.json({ ok: true, season: seasonInfo() });
+});
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' },                 // 게임을 다른 곳(Vercel 등)에 올려도 접속 가능
@@ -64,7 +119,7 @@ function saveWorld() {
 }
 if (!world.rates && envRates) world.rates = envRates;
 world.rates = cleanRates(world.rates) || cleanRates({});
-console.log('서버 배율:', JSON.stringify(world.rates), '· 시즌:', SEASON || '(없음)');
+console.log('서버 배율:', JSON.stringify(world.rates), '· 시즌:', SEASON || '(없음)', '· 관리자 페이지: /admin');
 setInterval(saveWorld, 20000);
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { dirty = true; saveWorld(); process.exit(0); });
 
@@ -174,7 +229,7 @@ io.on('connection', (sock) => {
   const id = sock.id, guest = '모험가' + String(guestNo++).padStart(3, '0');
   players.set(id, { name: guest, state: null, joinedAt: Date.now(), party: null, invites: new Map() });
   const others = {}; for (const [k, p] of players) if (k !== id && p.state) others[k] = p.state;
-  sock.emit('welcome', { id, guest, host: hostId, players: others, world: snapshot(), rates: world.rates, season: SEASON });
+  sock.emit('welcome', { id, guest, host: hostId, players: others, world: snapshot(), rates: world.rates, season: seasonInfo() });
   log(`접속 ${guest} ${id} (현재 ${players.size}명)`);
 
   const okMove = limiter(30), okAct = limiter(20), okWorld = limiter(30);

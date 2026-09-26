@@ -118,6 +118,8 @@
   #bChat{position:fixed;right:264px;top:10px;display:flex;width:40px;height:40px;border-radius:8px;font-size:18px;padding:0}
   #bParty{position:fixed;right:356px;top:10px;display:flex;width:40px;height:40px;border-radius:8px;font-size:18px;padding:0}
   #bParty.on{border-color:#6ad86a;box-shadow:0 0 8px #6ad86a88} #bParty[data-n]:not([data-n=""])::after{content:attr(data-n);position:absolute;right:-4px;top:-4px;background:#3a9a3a;color:#fff;font-size:10px;border-radius:8px;padding:0 4px}
+  #notice{position:fixed;left:50%;top:96px;transform:translateX(-50%);z-index:37;max-width:min(640px,92vw);background:rgba(60,40,10,.94);border:2px solid var(--gold);border-radius:10px;padding:10px 16px;font-size:16px;font-weight:bold;color:#ffe8a0;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.55);pointer-events:none}
+  #notice[hidden]{display:none} #notice.pop{animation:noticeIn .4s ease-out} @keyframes noticeIn{0%{opacity:0;transform:translate(-50%,-10px)}100%{opacity:1;transform:translate(-50%,0)}}
   body.intitle #bParty,body.intitle #party,body.intitle #partyInvite{display:none!important}
   #party{position:fixed;right:10px;top:58px;width:min(360px,94vw);max-height:calc(100vh - 150px);overflow:auto;z-index:35;background:rgba(20,26,18,.96);border:1px solid #6ad86a;border-radius:10px;font-size:12px;box-shadow:0 6px 24px rgba(0,0,0,.5)}
   #party[hidden],#partyInvite[hidden]{display:none} #party .ptHead{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #3a5a30;position:sticky;top:0;background:#142010}
@@ -241,6 +243,7 @@
 <button class="btn" id="bParty" title="파티 (Y)">👥</button>
 <div id="party" hidden></div>
 <div id="partyInvite" hidden></div>
+<div id="notice" hidden></div>
 <button class="btn" id="bMap" title="월드 맵 (M)">🗺</button>
 <button class="btn" id="bAtk">공격</button>
 <button class="btn" id="bRoll">구르기</button>
@@ -3538,10 +3541,13 @@ const online = {
     if (!this.room) { this.renderPanel(); return; }
     this.status = 'connecting'; this.renderPanel();
     const dead = () => { applyServerRates(null, false); this.status = 'offline'; this.leaveShared(); this.room = null; this.remotes.clear(); this.renderPanel(); };
-    this.room.onConnection((c) => { if (this.room) { this.status = c ? 'online' : 'connecting'; if (!c) this.remotes.clear(); this.last = ''; this.renderPanel(); } }, dead);
+    this.room.onConnection((c) => { if (this.room && !this.kicked) { this.status = c ? 'online' : 'connecting'; if (!c) this.remotes.clear(); this.last = ''; this.renderPanel(); } }, dead);
     this.room.onPeers((ch) => this.sync(ch.peers), dead);
     if (this.room.on) {                                                          // 서버 전용: 행동 · 공용 월드
-      if (this.room.partyEmit) party.bind(this.room);                            // 파티 (party.js)
+      if (this.room.partyEmit) party.bind(this.room);
+      this.room.on('season', (sv) => this.checkSeason(sv));                      // 관리자 페이지: 시즌 초기화 (지금 접속 중인 사람도)
+      this.room.on('notice', (m) => this.notice(m && m.text));                   // 관리자 공지
+      this.room.on('kicked', (m) => { this.kicked = true; this.status = 'offline'; this.remotes.clear(); this.renderPanel(); this.game.log('⛔ 서버 관리자가 접속을 끊었어요' + (m && m.msg ? ` — ${String(m.msg).slice(0, 80)}` : ''), '#ff9a8a'); alert('⛔ 서버 관리자가 접속을 끊었어요' + (m && m.msg ? `\n${String(m.msg).slice(0, 80)}` : '')); });                            // 파티 (party.js)
       this.room.on('welcome', (w) => { this.welcome = w; if (this.checkSeason(w.season)) return; applyServerRates(w.rates || null, false); if (this.game.playing) this.enterShared(w.world); });
       this.room.on('rates', (r) => { applyServerRates(r, true); });                  // 관리자가 서버 배율을 바꿈 → 모두에게 적용
       this.room.on('offline', () => { this.leaveShared(); applyServerRates(null, false); });
@@ -3558,16 +3564,19 @@ const online = {
    *  → 초기화했으면 true
    */
   checkSeason(season) {
-    if (typeof season !== 'string' || !season) return false;
-    const KEY = 'pf-season'; let cur = null;
-    try { cur = localStorage.getItem(KEY); } catch (e) { return false; }
-    if (cur === season) return false;
-    try { localStorage.setItem(KEY, season); } catch (e) { /* 저장 불가 */ }
-    if (!slots.list.some(Boolean)) return false;                    // 지울 캐릭터가 없음
+    // season = { env: 환경 변수 SEASON, t: 관리자 페이지에서 초기화한 시각 } (예전 서버는 글자 하나)
+    const sv = typeof season === 'string' ? { env: season, t: 0 } : season && typeof season === 'object' ? { env: String(season.env || ''), t: Number(season.t) || 0 } : null;
+    if (!sv) return false;
+    const KEY = 'pf-season'; let raw = null;
+    try { raw = localStorage.getItem(KEY); } catch (e) { return false; }
+    let cur = null; if (raw !== null) { try { const o = JSON.parse(raw); cur = o && typeof o === 'object' ? { env: String(o.env || ''), t: Number(o.t) || 0 } : { env: String(o), t: 0 }; } catch (e) { cur = { env: raw, t: 0 }; } }
+    const fresh = cur ? sv.env !== cur.env || sv.t > cur.t : !!(sv.env || sv.t);      // 새 시즌인가
+    try { localStorage.setItem(KEY, JSON.stringify({ env: sv.env, t: Math.max(sv.t, cur ? cur.t : 0) })); } catch (e) { /* 저장 불가 */ }
+    if (!fresh || !slots.list.some(Boolean)) return false;          // 새 시즌이 아니거나 지울 캐릭터가 없음
     const g = this.game; g.noSave = true;                           // 지우는 중에 다시 저장되지 않게
     slots.list = slots.list.map(() => null); slots.save();
     try { localStorage.removeItem('field-arpg-save-v1'); } catch (e) { /* 없음 */ }
-    alert(`🔄 새 시즌(${season})이 시작됐어요!\n서버 주인이 초기화해서 이 서버의 캐릭터가 모두 지워졌어요. 새 캐릭터로 시작해 주세요.`);
+    alert('🔄 새 시즌이 시작됐어요!\n서버 주인이 초기화해서 이 서버의 캐릭터가 모두 지워졌어요. 새 캐릭터로 시작해 주세요.');
     location.reload();
     return true;
   },
@@ -3756,6 +3765,15 @@ const online = {
   sprites(list, game) {
     const map = this.mapId(game); if (!map) return;
     for (const r of this.remotes.values()) if (r.map === map && r.ready) list.push({ y: r.y, e: r });
+  },
+
+  /** 관리자 공지: 화면 위 큰 글씨 + 기록 */
+  notice(text) {
+    text = String(text || '').slice(0, 120); if (!text) return;
+    const g = this.game; g.log('📢 [공지] ' + text, '#ffd86a'); sfx.boss();
+    const el = $('notice'); if (!el) return;
+    el.textContent = '📢 ' + text; el.hidden = false; el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+    clearTimeout(this.noticeT); this.noticeT = setTimeout(() => { el.hidden = true; }, 8000);
   },
 
   // ---------------------------------------------------------------- 채팅
