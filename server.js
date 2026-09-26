@@ -32,6 +32,7 @@ const { Server } = require('socket.io');
 const PORT = Number(process.env.PORT) || 3000;
 const MAX_PLAYERS = Number(process.env.MAX_PLAYERS) || 60;
 const DATA = process.env.DATA_FILE || path.join(__dirname, 'data', 'world.json');
+const SEASON = String(process.env.SEASON || '').slice(0, 20);          // ◀ 시즌 번호 — Render 환경 변수 SEASON 을 바꾸면(1 → 2 …) 접속하는 모든 사람의 캐릭터가 초기화됨
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '1234';           // ◀ 서버 배율을 바꿀 때 쓰는 관리자 비밀번호 (Render 환경 변수 ADMIN_PASSWORD 로 바꾸세요)
 const RATE_KEYS = ['xp', 'gold', 'drop', 'gather', 'enh', 'elite', 'respawn'];
 /** 서버 배율 검사: 알려진 키 · 0.1 ~ 100 */
@@ -43,7 +44,7 @@ function cleanRates(r) {
 
 const app = express();
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'], maxAge: 0 }));
-app.get('/status', (req, res) => res.json({ players: players.size, parties: parties.size, host: hostId, rates: world.rates }));
+app.get('/status', (req, res) => res.json({ players: players.size, parties: parties.size, host: hostId, rates: world.rates, season: SEASON || null }));
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*' },                 // 게임을 다른 곳(Vercel 등)에 올려도 접속 가능
@@ -63,7 +64,7 @@ function saveWorld() {
 }
 if (!world.rates && envRates) world.rates = envRates;
 world.rates = cleanRates(world.rates) || cleanRates({});
-console.log('서버 배율:', JSON.stringify(world.rates));
+console.log('서버 배율:', JSON.stringify(world.rates), '· 시즌:', SEASON || '(없음)');
 setInterval(saveWorld, 20000);
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { dirty = true; saveWorld(); process.exit(0); });
 
@@ -173,7 +174,7 @@ io.on('connection', (sock) => {
   const id = sock.id, guest = '모험가' + String(guestNo++).padStart(3, '0');
   players.set(id, { name: guest, state: null, joinedAt: Date.now(), party: null, invites: new Map() });
   const others = {}; for (const [k, p] of players) if (k !== id && p.state) others[k] = p.state;
-  sock.emit('welcome', { id, guest, host: hostId, players: others, world: snapshot(), rates: world.rates });
+  sock.emit('welcome', { id, guest, host: hostId, players: others, world: snapshot(), rates: world.rates, season: SEASON });
   log(`접속 ${guest} ${id} (현재 ${players.size}명)`);
 
   const okMove = limiter(30), okAct = limiter(20), okWorld = limiter(30);

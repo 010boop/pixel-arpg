@@ -3542,7 +3542,7 @@ const online = {
     this.room.onPeers((ch) => this.sync(ch.peers), dead);
     if (this.room.on) {                                                          // 서버 전용: 행동 · 공용 월드
       if (this.room.partyEmit) party.bind(this.room);                            // 파티 (party.js)
-      this.room.on('welcome', (w) => { this.welcome = w; applyServerRates(w.rates || null, false); if (this.game.playing) this.enterShared(w.world); });
+      this.room.on('welcome', (w) => { this.welcome = w; if (this.checkSeason(w.season)) return; applyServerRates(w.rates || null, false); if (this.game.playing) this.enterShared(w.world); });
       this.room.on('rates', (r) => { applyServerRates(r, true); });                  // 관리자가 서버 배율을 바꿈 → 모두에게 적용
       this.room.on('offline', () => { this.leaveShared(); applyServerRates(null, false); });
       this.room.on('action', (m) => this.onAction(m));
@@ -3553,6 +3553,24 @@ const online = {
     }
   },
   get server() { return !!(this.room && this.room.world); },
+  /**
+   * 시즌 확인 (서버 환경 변수 SEASON) — 이 브라우저가 기억하는 시즌과 다르면 캐릭터를 모두 지우고 새로 시작
+   *  → 초기화했으면 true
+   */
+  checkSeason(season) {
+    if (typeof season !== 'string' || !season) return false;
+    const KEY = 'pf-season'; let cur = null;
+    try { cur = localStorage.getItem(KEY); } catch (e) { return false; }
+    if (cur === season) return false;
+    try { localStorage.setItem(KEY, season); } catch (e) { /* 저장 불가 */ }
+    if (!slots.list.some(Boolean)) return false;                    // 지울 캐릭터가 없음
+    const g = this.game; g.noSave = true;                           // 지우는 중에 다시 저장되지 않게
+    slots.list = slots.list.map(() => null); slots.save();
+    try { localStorage.removeItem('field-arpg-save-v1'); } catch (e) { /* 없음 */ }
+    alert(`🔄 새 시즌(${season})이 시작됐어요!\n서버 주인이 초기화해서 이 서버의 캐릭터가 모두 지워졌어요. 새 캐릭터로 시작해 주세요.`);
+    location.reload();
+    return true;
+  },
 
   /** 내 캐릭터가 있는 공용 맵 (공용 월드가 아니면 영지 · 내 집은 개인 공간 → null) */
   mapId(game) {
@@ -8086,7 +8104,7 @@ class Game {
     title.show();
   }
   save() {
-    if (!this.playing || !this.player) return;
+    if (!this.playing || !this.player || this.noSave) return;          // noSave: 시즌 초기화 중
     const p = this.player;
     // 실내에서 저장하면 들어간 문 앞 위치로 (영지 안의 집이면 영지에서 이어하기)
     const at = this.indoor ? { map: this.world.returnMap, x: this.world.exitTo.x, y: this.world.exitTo.y } : { map: this.world, x: p.x, y: p.y };
