@@ -65,6 +65,8 @@
     action(d) { if (this.ok) this.sock.emit('action', d); }
     world(op) { if (this.ok) this.sock.emit('world', op); }
     sync(d) { if (this.isHost) this.sock.emit('sync', d); }
+    /** 관리자 로그인 (서버가 ADMIN_PASSWORD 확인) → cb({ ok, msg }) */
+    adminAuth(pass, cb) { if (!this.ok) return cb && cb({ ok: false, msg: '서버에 연결돼 있지 않아요' }); this.sock.timeout(6000).emit('adminAuth', { pass }, (err, res) => cb && cb(err ? { ok: false, msg: '서버 응답이 없어요' } : res)); }
     /** 관리자: 서버 배율 바꾸기 → cb({ ok, msg }) */
     setRates(pass, rates, cb) { if (!this.ok) return cb && cb({ ok: false, msg: '서버에 연결돼 있지 않아요' }); this.sock.timeout(6000).emit('setRates', { pass, rates }, (err, res) => cb && cb(err ? { ok: false, msg: '서버 응답이 없어요' } : res)); }
     onConnection(f, dead) { this.cb.conn.push(f); if (dead) this.cb.dead.push(dead); f(this.ok); return () => {}; }

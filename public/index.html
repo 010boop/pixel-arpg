@@ -6713,9 +6713,15 @@ function drawEstateStall(ctx, o) {
 //   맵 편집: 필드 바닥(잔디 · 흙 · 돌길 · 물) 칠하기 · 나무 · 바위 등 놓기/지우기 · 몬스터 스폰 지점 추가
 //            → 이 브라우저에 저장되고 다음에 켜도 유지 · JSON 으로 내보내기/가져오기
 //  ※ 관리자 기능은 이 브라우저의 내 게임에만 적용 (온라인 서버의 다른 사람에게는 영향 없음)
+//  ※ 온라인 서버 버전(server/public · main.js)에서는 관리자 창이 숨겨짐
+//     → 서버 주인만: 주소 뒤에 ?admin 을 붙여 열고(예: https://내주소/?admin) ` 키 → 서버 비밀번호(ADMIN_PASSWORD)
+//       비밀번호는 서버가 확인 (게임 파일에 들어 있지 않음) · 틀리면 거부 · 다른 사람에게는 ` 키 · 설정의 관리자 버튼이 보이지 않음
 // =====================================================================
 
-const ADMIN_PASSWORD = '1234';                 // ◀ 관리자 비밀번호 (바꿔서 쓰세요)
+const ADMIN_PASSWORD = '1234';                 // ◀ 관리자 비밀번호 (혼자 할 때 · claude.ai 게임 페이지) — 온라인 서버 버전에서는 쓰지 않음
+const ONLINE_BUILD = !!window.netReady;         // 온라인 서버 버전 (main.js 가 먼저 읽힘)
+/** 이 화면에서 관리자 창을 열 수 있나 (온라인 서버 버전: 주소에 ?admin 이 있을 때만) */
+const adminAllowed = () => !ONLINE_BUILD || /[?&#]admin\b/.test(location.search + location.hash);
 const MAP_EDIT_KEY = 'pf-mapedits-v1';
 const RATE_KEY = 'pf-rates-v1';
 
@@ -6775,7 +6781,7 @@ const admin = {
 
   // ---------------------------------------------------------------- 열기 · 비밀번호
   toggle() {
-    if (!this.game || !this.game.playing) return;
+    if (!this.game || !this.game.playing || !adminAllowed()) return;   // 온라인 서버: 일반 접속자는 관리자 창 없음
     if (!this.unlocked) return this.askPassword();
     this.open = !this.open; if (!this.open) this.setEditing(false);
     this.render();
@@ -6784,7 +6790,19 @@ const admin = {
     const box = $('admin'); box.hidden = false; this.open = true;
     box.innerHTML = `<div class="adHead"><b>🛠 관리자 모드</b><button data-x>닫기</button></div>
       <div class="adBody"><p>비밀번호를 입력하세요</p><input type="password" id="adPass" placeholder="비밀번호"> <button class="gold" id="adOk">확인</button><p class="dimtxt" id="adMsg"></p></div>`;
-    const ok = () => { this.pass = $('adPass').value; if ($('adPass').value === ADMIN_PASSWORD) { this.unlocked = true; this.game.log('🛠 관리자 모드가 열렸어요 (` 키로 열고 닫기)', '#ffd86a'); this.render(); } else $('adMsg').textContent = '비밀번호가 틀렸어요'; };
+    if (ONLINE_BUILD) box.querySelector('.adBody p').textContent = '서버 관리자 비밀번호 (Render 의 ADMIN_PASSWORD)';
+    const ok = () => { this.pass = $('adPass').value;
+      if (ONLINE_BUILD) {                                                // 온라인 서버: 서버가 비밀번호 확인
+        const room = online.room;
+        if (!room || !room.adminAuth) { $('adMsg').textContent = '서버에 연결된 뒤 다시 해 주세요'; return; }
+        $('adMsg').textContent = '확인 중…';
+        room.adminAuth(this.pass, (res) => {
+          if (res && res.ok) { this.unlocked = true; this.serverPass = this.pass; this.game.log('🛠 관리자 모드가 열렸어요 (서버 주인 · ` 키로 열고 닫기)', '#ffd86a'); this.render(); }
+          else if ($('adMsg')) $('adMsg').textContent = (res && res.msg) || '비밀번호가 틀렸어요';
+        });
+        return;
+      }
+      if ($('adPass').value === ADMIN_PASSWORD) { this.unlocked = true; this.game.log('🛠 관리자 모드가 열렸어요 (` 키로 열고 닫기)', '#ffd86a'); this.render(); } else $('adMsg').textContent = '비밀번호가 틀렸어요'; };
     $('adOk').onclick = ok; $('adPass').addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') ok(); if (e.key === 'Escape') this.close(); });
     box.querySelector('[data-x]').onclick = () => this.close();
     setTimeout(() => $('adPass').focus(), 30);
@@ -7369,7 +7387,7 @@ const ui = {
     const bar = document.createElement('div'); bar.className = 'setBar';
     const btn = (t, fn, cls = '') => { const b = document.createElement('button'); b.textContent = t; b.className = cls; b.onclick = fn; bar.append(b); };
     btn('기본값으로', () => { settings.reset(); this.render(); });
-    if (this.game.playing) btn('🛠 관리자 (` 키)', () => { this.close(); admin.toggle(); });
+    if (this.game.playing && adminAllowed()) btn('🛠 관리자 (` 키)', () => { this.close(); admin.toggle(); });   // 온라인 서버: 주소에 ?admin 이 있을 때만
     if (this.game.playing) {
       btn('지금 저장', () => { this.game.save(); this.game.log('저장했습니다', '#9cff9c'); sfx.coin(); });
       btn('타이틀로 (저장 후)', () => this.game.toTitle(), 'gold');

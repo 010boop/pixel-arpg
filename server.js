@@ -17,6 +17,7 @@
 //   action      공격 · 스킬 · 채집 · 농사 · 건축 같은 한 번짜리 행동 → 'playerAction'
 //   world       건축 · 농사로 바뀐 월드 (서버가 저장)             → 'worldOp'
 //   sync        호스트(가장 먼저 온 사람)가 5초마다 보내는 밭 · 시계 → 'worldSync'
+//   adminAuth   관리자 창 열기 (주소에 ?admin · 서버 비밀번호 확인)
 //   setRates    관리자 비밀번호 + 서버 배율(경험치 · 골드 · 드롭 …) → 저장하고 모두에게 'rates' (접속한 모든 사람에게 적용)
 //   disconnect  나감                                               → 'playerLeft'
 //  몬스터 · 전리품 · 가방 · 세이브는 각자 브라우저에 있음
@@ -176,6 +177,13 @@ io.on('connection', (sock) => {
     if (d.clock && int(d.clock.day, 1, 1e6) && typeof d.clock.t === 'number') world.clock = { day: d.clock.day, t: Math.round(d.clock.t) };
     dirty = true;
     sock.broadcast.emit('worldSync', { farm: Object.values(world.farm), efarm: Object.values(world.efarm), clock: world.clock });
+  });
+  let authFails = 0;
+  sock.on('adminAuth', (d, ack) => {                   // 관리자 창 열기 (서버 주인만 · 비밀번호는 서버만 앎)
+    const reply = typeof ack === 'function' ? ack : () => {};
+    if (authFails >= 5) return reply({ ok: false, msg: '너무 많이 틀렸어요. 새로고침 후 다시 해 주세요' });
+    if (!d || d.pass !== ADMIN_PASSWORD) { authFails++; log(`관리자 로그인 실패 ${id} (${authFails}회)`); return reply({ ok: false, msg: '비밀번호가 틀렸어요' }); }
+    log(`관리자 로그인 ${players.get(id) ? players.get(id).name : id}`); reply({ ok: true });
   });
   const okRate = limiter(2);
   sock.on('setRates', (d, ack) => {                    // 관리자: 서버 배율 → 모두에게
