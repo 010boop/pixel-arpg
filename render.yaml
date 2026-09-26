@@ -1,0 +1,14 @@
+# Render Blueprint — 저장소에 이 파일이 있으면 Render 가 설정을 자동으로 채워 줌
+services:
+  - type: web
+    name: pixel-field
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /status
+    envVars:
+      - key: MAX_PLAYERS
+        value: "60"
+      - key: ADMIN_PASSWORD      # 서버 배율을 바꿀 때 쓰는 비밀번호 (Render 대시보드에서 직접 입력)
+        sync: false
