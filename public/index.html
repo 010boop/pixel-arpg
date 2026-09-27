@@ -328,7 +328,7 @@
 //  ※ 에셋을 다른 폴더에 두었다면 ASSET_ROOT 만 바꾸세요. 예) './assets/'
 // =====================================================================
 
-const GAME_VERSION = 'v61';   // ◀ 업데이트마다 올림 · 타이틀 화면 오른쪽 아래 · 서버 /status 에 표시
+const GAME_VERSION = 'v62';   // ◀ 업데이트마다 올림 · 타이틀 화면 오른쪽 아래 · 서버 /status 에 표시
 const ASSET_ROOT = './';   // ◀ Entities / Weapons / Environment 가 들어있는 폴더
 
 const NPC_DIR = "Entities/Npc's/";
@@ -4925,8 +4925,8 @@ Object.assign(ITEMS, {
 });
 // v61: 대형 무한 물약 — 써도 없어지지 않음 (재사용 대기시간만) · 아주 비싼 재료 · 판매 불가 · 자동사냥 물약으로 지정 가능
 Object.assign(ITEMS, {
-  inf_mana_potion: { name: '대형 무한 마나 물약', type: 'potion', mp: 150, infinite: 8, value: 2, stack: 1, icon: ['bits', 'mpot2'], tint: 'drop-shadow(0 0 2px #9a6aff) brightness(1.25)', desc: '마나 150 회복 · 써도 없어지지 않아요 (8초마다) · 판매 불가' },
-  inf_potion:      { name: '대형 무한 물약',      type: 'potion', heal: 150, infinite: 8, value: 2, stack: 1, icon: ['int', 581, 291, 7, 10], tint: 'drop-shadow(0 0 2px #ffd860) brightness(1.2)', desc: '체력 150 회복 · 써도 없어지지 않아요 (8초마다) · 판매 불가' },
+  inf_mana_potion: { name: '대형 무한 마나 물약', type: 'potion', mp: 150, infinite: true, value: 2, stack: 1, icon: ['bits', 'mpot2'], tint: 'drop-shadow(0 0 2px #9a6aff) brightness(1.25)', desc: '마나 150 회복 · 써도 없어지지 않아요 · 대기시간 없이 바로바로 · 판매 불가' },
+  inf_potion:      { name: '대형 무한 물약',      type: 'potion', heal: 150, infinite: true, value: 2, stack: 1, icon: ['int', 581, 291, 7, 10], tint: 'drop-shadow(0 0 2px #ffd860) brightness(1.2)', desc: '체력 150 회복 · 써도 없어지지 않아요 · 대기시간 없이 바로바로 · 판매 불가' },
 });
 RECIPES.push(
   { station: 'alchemy', cat: '무한 물약', result: 'inf_mana_potion', qty: 1, mats: { big_mana_potion: 300, essence: 30, mana: 150, dragon_scale: 3 }, gold: 300000, tier: 3 },
@@ -5523,7 +5523,7 @@ class Player {
       if (left > 0) { game.popText(this.x, this.y - 32, `${Math.ceil(left)}초`, '#a8a090'); return false; }
       if (d.mp && this.mp >= this.maxMp) { game.log('마나가 가득 찼습니다'); return false; }
       if (d.heal && this.hp >= this.maxHp) { game.log('체력이 가득 찼습니다'); return false; }
-      this.infCd[s.id] = performance.now() / 1000 + d.infinite;
+      this.infCd[s.id] = performance.now() / 1000 + (d.infCd || 0);   // v62: 대기시간 없음
       if (d.mp) { this.mp = Math.min(this.maxMp, this.mp + d.mp); game.popText(this.x, this.y - 32, '+' + d.mp, '#8fb8ff'); game.burst(this.x, this.y - 12, '#8fb8ff', 12); }
       if (d.heal) { this.hp = Math.min(this.maxHp, this.hp + d.heal); game.popText(this.x, this.y - 32, '+' + d.heal, '#7dff8a'); game.burst(this.x, this.y - 12, '#7dff8a', 12); }
       sfx.heal(); return true;
