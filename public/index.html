@@ -134,6 +134,7 @@
   .ranch .rkSum{background:#1a140e;border:1px solid var(--edge);border-radius:8px;padding:6px 8px;margin:4px 0;font-size:13px} .ranch .rkSum button{margin-left:6px}
   .ranch .rkRow{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #33271c} .ranch .rkRow .grow{flex:1} .ranch .rkIc{font-size:22px;width:30px;text-align:center}
   .ranch .rkSec{margin:10px 0 4px;color:var(--gold);font-weight:bold} .ranch .bad{color:#ff9a8a} .ranch small{font-size:11px}
+  .ctabs.kinds{flex-wrap:wrap;gap:4px;margin-top:-2px} .ctabs.kinds button{padding:3px 8px;font-size:12px} .ctabs.kinds small{opacity:.6;font-size:10px}
   body.intitle #trade,body.intitle #tradeReq{display:none!important}
   body.intitle #bParty,body.intitle #party,body.intitle #partyInvite{display:none!important}
   #party{position:fixed;right:10px;top:58px;width:min(360px,94vw);max-height:calc(100vh - 150px);overflow:auto;z-index:35;background:rgba(20,26,18,.96);border:1px solid #6ad86a;border-radius:10px;font-size:12px;box-shadow:0 6px 24px rgba(0,0,0,.5)}
@@ -614,7 +615,7 @@ const isEquip = (id) => ITEMS[id] && EQUIP_SLOTS.some(([s]) => s === ITEMS[id].t
 const isConsumable = (id) => ITEMS[id] && (ITEMS[id].type === 'potion' || ITEMS[id].type === 'food');
 const stackMax = (id) => ITEMS[id].stack || 1;
 const sellPrice = (id) => Math.max(1, Math.floor(ITEMS[id].value / 2));
-const MOVES_NAME = { sword: '검술', dagger: '단검술', spear: '창술', heavy: '둔기', bow: '궁술', xbow: '석궁술', staff: '마법', wand: '완드 마법', claw: '클로 격투', scepter: '신성 타격', tome: '신성 마법' };
+const MOVES_NAME = { sword: '검술', dagger: '단검술', spear: '창술', heavy: '중무기', bow: '궁술', xbow: '석궁술', staff: '마법', wand: '완드 마법', claw: '클로 격투', scepter: '신성 타격', tome: '신성 마법' };
 /** 채집 도구 — 자원 종류 → 필요한 도구 */
 const TOOL_FOR = { tree: 'axe', rock: 'pick', bush: 'sickle', fish: 'rod', till: 'hoe', water: 'water' };
 const TOOL_NAME = { axe: '도끼', pick: '곡괭이', sickle: '낫', rod: '낚싯대', hoe: '삽', water: '물뿌리개' };
@@ -1183,6 +1184,18 @@ const HOLD = {
 // ---------------------------------------------------------------------
 const RANGED_MOVES = ['bow', 'xbow', 'staff', 'wand', 'tome'];
 const TWO_HAND_MOVES = ['bow', 'xbow', 'staff'];
+/** v52: 장비 종류 (제작 · 가방 목록 분류 버튼) — 검 · 대검 · 도끼 · 둔기 · 단검 · 창 · 활 … · 투구 · 갑옷 · 장갑 … */
+const GEAR_KINDS = ['검', '대검', '도끼', '둔기', '단검', '창', '활', '석궁', '지팡이', '완드', '클로', '홀', '성서', '방패', '투구', '갑옷', '장갑', '신발', '반지 · 장신구'];
+function gearKind(id) {
+  const d = ITEMS[id]; if (!d) return null;
+  if (d.type !== 'weapon') return { shield: '방패', helmet: '투구', armor: '갑옷', gloves: '장갑', boots: '신발', accessory: '반지 · 장신구' }[d.type] || null;
+  if (d.tool && d.atk <= 3) return null;                                          // 생활 도구는 따로
+  const t = (d.ow && d.ow.type) || id;
+  if (/axe/.test(t)) return '도끼';
+  if (/mace|hammer|club/.test(t)) return '둔기';
+  if (d.moves === 'heavy') return '대검';
+  return WEAPON_KIND[d.moves] || '검';
+}
 const WEAPON_KIND = { sword: '검', dagger: '단검', spear: '창', heavy: '둔기 · 도끼', bow: '활', xbow: '석궁', staff: '지팡이', wand: '완드', claw: '클로', scepter: '홀', tome: '성서' };
 const isRanged = (id) => !!id && RANGED_MOVES.includes(ITEMS[id].moves);
 const isTwoHand = (id) => !!id && TWO_HAND_MOVES.includes(ITEMS[id].moves);
@@ -2920,11 +2933,15 @@ const skills = {
     const why = this.blocked(p, sk);
     if (why) { if (!p.skillMsgT) { game.log(why, '#ff9a8a'); sfx.deny(); p.skillMsgT = 0.6; } return false; }
     if (!admin.flags.mana) p.mp -= sk.mp; p.skillCd[sk.id] = sk.cd;
+    // v53: 스킬을 쓰기 전에 공격하던 몬스터 → 스킬이 끝나면 다시 공격 (멍하니 서 있지 않게)
+    const prev = p.st && p.st.resume;
+    const fight = (m) => m && m.hittable && m.state === 'chase' && Math.hypot(m.x - p.x, m.y - p.y) < 140;   // 나와 싸우는 중인 가까운 몬스터
+    const resume = p.order && p.order.type === 'attack' && p.order.target && p.order.target.hittable ? p.order.target : prev && prev.hittable ? prev : fight(p.target) ? p.target : null;
     p.order = null;
     if (p.target) p.aim = Math.atan2(p.target.y - 7 * p.target.scale - (p.y - 8), p.target.x - p.x);
     else if (game.cursor) p.aim = Math.atan2(game.cursor.y - (p.y - 8), game.cursor.x - p.x);
     p.dir = FOUR(Math.cos(p.aim), Math.sin(p.aim));
-    p.setState('skill', { sk, dur: sk.dur, done: false, hits: new Set() });
+    p.setState('skill', { sk, dur: sk.dur, done: false, hits: new Set(), resume });
     game.popText(p.x, p.y - 44, sk.name, '#9ad8ff'); online.act({ k: 'skill', id: sk.id });
     if (sk.hit === 0) { p.st.done = true; SKILL_FX[sk.id].start(p, game, sk); }
     return true;
@@ -2934,7 +2951,11 @@ const skills = {
     const s = p.st, sk = s.sk, fx = SKILL_FX[sk.id];
     if (!s.done && p.stT >= s.dur * sk.hit) { s.done = true; fx.start(p, game, sk); }
     const v = fx.tick ? fx.tick(p, dt, game, sk) || [0, 0] : [0, 0];
-    if (p.stT >= s.dur) { if (fx.end) fx.end(p, game, sk); p.setState('idle'); }
+    if (p.stT >= s.dur) {
+      if (fx.end) fx.end(p, game, sk);
+      const r = s.resume; p.setState('idle');
+      if (r && r.hittable && p.alive && !p.order && !game.uiOpen) p.command('attack', game, r);   // 하던 공격 이어서
+    }
     return v;
   },
   update(dt, game) {
@@ -8176,7 +8197,7 @@ function itemIconCanvas(id, size = 28) {
 }
 function itemInfo(id) {
   const d = ITEMS[id];
-  if (d.type === 'weapon') { const wc = weaponClass(id); return `${wc ? `<b style="color:#ffd86a">${HEROES[wc].name} 전용</b> · ` : '<b style="color:#bfe8a0">누구나</b> · '}${d.tool ? `🛠 ${TOOL_USE[d.tool]} 도구 · ` : ''}${MOVES_NAME[d.moves]} · 공격력 ${d.atk} · ${MOVES[d.moves].length}연속 공격${isTwoHand(id) ? ' · 두 손' : ''}${d.desc ? '<br>' + d.desc : d.lv ? '<br>착용 Lv' + d.lv : ''}`; }
+  if (d.type === 'weapon') { const wc = weaponClass(id); return `${wc ? `<b style="color:#ffd86a">${HEROES[wc].name} 전용</b> · ` : '<b style="color:#bfe8a0">누구나</b> · '}${d.tool ? `🛠 ${TOOL_USE[d.tool]} 도구 · ` : ''}${(!d.tool || d.atk > 3) && gearKind(id) ? gearKind(id) + ' · ' : ''}${MOVES_NAME[d.moves]} · 공격력 ${d.atk} · ${MOVES[d.moves].length}연속 공격${isTwoHand(id) ? ' · 두 손' : ''}${d.desc ? '<br>' + d.desc : d.lv ? '<br>착용 Lv' + d.lv : ''}`; }
   if (d.stats) {
     let s = statText(d.stats) + (d.lv ? ` · <span style="color:${game.player && game.player.level < d.lv ? '#ff7a6a' : '#bfe8a0'}">착용 Lv${d.lv}</span>` : '');
     if (d.set) s += '<br>' + setInfoHtml(d.set, game.player ? setCounts(game.player.equip)[d.set] || 0 : 0);
@@ -8450,12 +8471,28 @@ const ui = {
       body.append(bar);
     }
     if (tab === '⚒ 강화') { body.append(this.enhancePanel(p)); return; }
-    let lastCat = null;
+    // v52: 종류 버튼 (검 · 대검 · 도끼 · 둔기 · 활 … · 투구 · 갑옷 · 장갑 …) — 이 탭에 장비 종류가 2개 이상이면
+    const shown = [];
     this.crafting.recipes.forEach((r, i) => {
       if (tab && (r.result.startsWith('ow_') || r.result.startsWith('cw_') ? r.cat : '기본 제작') !== tab) return;
       if (tab && this.craftMine && ITEMS[r.result].ow && weaponClass(r.result) && weaponClass(r.result) !== p.clsId) return;   // 내 직업 무기만
+      shown.push([r, i]);
+    });
+    const kinds = GEAR_KINDS.filter((k) => shown.some(([r]) => gearKind(r.result) === k));
+    let kind = null;
+    if (kinds.length >= 2 || (kinds.length === 1 && shown.some(([r]) => !gearKind(r.result)))) {
+      kind = ['전체', ...kinds].includes(this.craftKind) ? this.craftKind : '전체'; this.craftKind = kind;
+      const bar = document.createElement('div'); bar.className = 'ctabs kinds';
+      for (const k of ['전체', ...kinds]) { const n = k === '전체' ? shown.length : shown.filter(([r]) => gearKind(r.result) === k).length; const b = document.createElement('button'); b.innerHTML = `${k} <small>${n}</small>`; b.className = k === kind ? 'on' : ''; b.onclick = () => { this.craftKind = k; sfx.select(); this.render(); }; bar.append(b); }
+      body.append(bar);
+      const ord = (r) => { const k = gearKind(r.result); return k ? GEAR_KINDS.indexOf(k) : -1; };
+      shown.sort((a, b) => ord(a[0]) - ord(b[0]) || (ITEMS[a[0].result].lv || 0) - (ITEMS[b[0].result].lv || 0) || a[1] - b[1]);   // 종류별 → 착용 레벨 순
+    }
+    let lastCat = null;
+    shown.forEach(([r, i]) => {
+      if (kind && kind !== '전체' && gearKind(r.result) !== kind) return;
       const locked = (r.tier || 1) > lv;                                      // 제작대 단계가 모자라면 잠김
-      const cat = locked ? `🔒 ${r.tier}단계 제작대에서 해금` : r.cat;
+      const gk = kind ? gearKind(r.result) : null, cat = locked ? `🔒 ${r.tier}단계 제작대에서 해금` : gk ? `${gk} · ${r.cat}` : r.cat;
       if (cat !== lastCat) { lastCat = cat; const h = document.createElement('div'); h.className = 'setSec' + (locked ? ' lockSec' : ''); h.textContent = cat; list.append(h); }
       const st = this.crafting.status(p.inv, i), row = document.createElement('div'); row.className = 'row' + (st.ok && !locked ? '' : ' dim') + (locked ? ' locked' : '');
       row.append(itemIconCanvas(r.result, 32));
