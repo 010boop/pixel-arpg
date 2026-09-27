@@ -118,6 +118,11 @@ async function login() {
 const dur = (ms) => { const m = Math.floor(ms / 60000), h = Math.floor(m / 60); return h ? `${h}시간 ${m % 60}분` : `${m}분`; };
 async function refresh(first) {
   const s = await api('state'); state = s;
+  try {                                                                    // 서버 배율 사본 (서버가 다시 켜지면 되살림)
+    const mine = JSON.parse(localStorage.getItem('pf-rates-backup') || 'null');
+    if (mine && mine._sig && (+mine._t || 0) > (+s.rates._t || 0)) { const r = await api('rates', { rates: mine }); if (r.ok) { toast('서버가 다시 켜져서 저장해 둔 배율을 되살렸어요'); return refresh(true); } }
+    else if (s.rates._sig && (!mine || (+s.rates._t || 0) >= (+mine._t || 0))) localStorage.setItem('pf-rates-backup', JSON.stringify(s.rates));
+  } catch (e) { /* 저장 불가 */ }
   $('upd').textContent = '갱신 ' + new Date().toLocaleTimeString();
   $('sPlayers').textContent = `${s.players.length}/${s.max}`; $('sParties').textContent = s.parties.length; $('sUptime').textContent = dur(s.uptime);
   $('sSeason').textContent = (s.season.env ? 'S' + s.season.env : '기본') + (s.season.t ? ' · ' + new Date(s.season.t).toLocaleDateString() + ' 초기화' : '');

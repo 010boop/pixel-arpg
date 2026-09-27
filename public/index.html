@@ -142,7 +142,17 @@
   .autoP .apGo{padding:8px 18px;font-size:15px} .autoP .apSec{margin:10px 0 4px;color:var(--gold);font-weight:bold} .autoP .apRow{display:flex;align-items:center;gap:6px;padding:3px 0;font-size:13px;flex-wrap:wrap}
   .autoP .apRow button.on{background:#6a4a1a;border-color:var(--gold)} .autoP select{background:#120d09;color:#f0e6d0;border:1px solid #5a4430;border-radius:4px;padding:2px 4px;max-width:220px}
   .autoP input[type=number]{width:56px;background:#120d09;color:#f0e6d0;border:1px solid #5a4430;border-radius:4px;padding:2px 4px} .autoP .apSk{background:#1e1812;border:1px solid #3a2c1e;border-radius:6px;padding:2px 6px;font-size:12px}
+  .autoP .apBuffs{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:4px;max-height:260px;overflow:auto;padding:2px}
+  .autoP .apBf{background:#1e1812;border:1px solid #3a2c1e;border-radius:6px;padding:3px 6px;font-size:12px;cursor:pointer;line-height:1.3} .autoP .apBf.on{border-color:var(--gold);background:#3a2a12}
+  .autoP .apBf.none{opacity:.5} .autoP .apBf i{font-style:normal;color:#a8a090;font-size:11px} .autoP .apBf small{color:#9ad8ff;font-size:10px} .autoP .apSec button{margin-left:6px;padding:1px 8px;font-size:11px}
   @media (max-width:640px){#bAuto{right:148px;top:160px}}
+  .bulk{background:#1a140e;border:1px solid var(--edge);border-radius:8px;padding:6px 8px;margin-bottom:6px} .bulkHead{margin-bottom:4px}
+  .bulkRow{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;align-items:center} .bulkRow button{padding:3px 8px;font-size:12px} .bulkRow button small{color:#ffd86a;font-size:10px}
+  .slot.pick{outline:2px solid #ffd86a;outline-offset:-2px;background:#4a3a14}
+  #vaultPin{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center} #vaultPin[hidden]{display:none}
+  #vaultPin .vpBox{background:#221a14;border:2px solid var(--gold);border-radius:10px;padding:14px 18px;min-width:260px;text-align:center}
+  #vaultPin input{display:block;width:100%;margin:10px 0;font-size:20px;letter-spacing:6px;text-align:center;background:#120d09;color:#fff;border:1px solid #6a5034;border-radius:6px;padding:6px}
+  #vaultPin .vpRow{display:flex;gap:6px;justify-content:center} .vaultBar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
   body.intitle #trade,body.intitle #tradeReq{display:none!important}
   body.intitle #bParty,body.intitle #party,body.intitle #partyInvite{display:none!important}
   #party{position:fixed;right:10px;top:58px;width:min(360px,94vw);max-height:calc(100vh - 150px);overflow:auto;z-index:35;background:rgba(20,26,18,.96);border:1px solid #6ad86a;border-radius:10px;font-size:12px;box-shadow:0 6px 24px rgba(0,0,0,.5)}
@@ -318,7 +328,7 @@
 //  ※ 에셋을 다른 폴더에 두었다면 ASSET_ROOT 만 바꾸세요. 예) './assets/'
 // =====================================================================
 
-const GAME_VERSION = 'v57';   // ◀ 업데이트마다 올림 · 타이틀 화면 오른쪽 아래 · 서버 /status 에 표시
+const GAME_VERSION = 'v60';   // ◀ 업데이트마다 올림 · 타이틀 화면 오른쪽 아래 · 서버 /status 에 표시
 const ASSET_ROOT = './';   // ◀ Entities / Weapons / Environment 가 들어있는 폴더
 
 const NPC_DIR = "Entities/Npc's/";
@@ -3733,8 +3743,8 @@ const online = {
       this.room.on('worldRestored', (w) => { if (this.shared && w) { this.loadWorld(w); this.game.log('🏡 서버가 다시 켜져서, 저장해 둔 백업으로 공용 영지(집 · 가구 · 밭)를 되살렸어요', '#9aff9a'); } });                      // 관리자 페이지: 시즌 초기화 (지금 접속 중인 사람도)
       this.room.on('notice', (m) => this.notice(m && m.text));                   // 관리자 공지
       this.room.on('kicked', (m) => { this.kicked = true; this.status = 'offline'; this.remotes.clear(); this.renderPanel(); this.game.log('⛔ 서버 관리자가 접속을 끊었어요' + (m && m.msg ? ` — ${String(m.msg).slice(0, 80)}` : ''), '#ff9a8a'); alert('⛔ 서버 관리자가 접속을 끊었어요' + (m && m.msg ? `\n${String(m.msg).slice(0, 80)}` : '')); });                            // 파티 (party.js)
-      this.room.on('welcome', (w) => { this.welcome = w; if (this.checkSeason(w.season)) return; applyServerRates(w.rates || null, false); if (this.game.playing) this.enterShared(w.world); });
-      this.room.on('rates', (r) => { applyServerRates(r, true); });                  // 관리자가 서버 배율을 바꿈 → 모두에게 적용
+      this.room.on('welcome', (w) => { this.welcome = w; if (this.checkSeason(w.season)) return; applyServerRates(w.rates || null, false); this.keepRates(w.rates, true); if (this.game.playing) this.enterShared(w.world); });
+      this.room.on('rates', (r) => { applyServerRates(r, true); this.keepRates(r, false); });                  // 관리자가 서버 배율을 바꿈 → 모두에게 적용
       this.room.on('offline', () => { this.leaveShared(); applyServerRates(null, false); });
       this.room.on('action', (m) => this.onAction(m));
       this.room.on('worldOp', (m) => this.applyOp(m.op, m.id));
@@ -3864,6 +3874,19 @@ const online = {
     g.housing.load(g.estate, this.priv.home); g.estateFarm.load(this.priv.efarm); g.farm.load(this.priv.farm); g.clock.load(this.priv.clock);
     this.priv = null; this.refreshRoom();
     g.log('🌐 연결이 끊겨 혼자 하기로 돌아왔어요 (내 영지로 돌아옴)', '#a8b8c8');
+  },
+  /**
+   * 서버 배율 사본 (v58): 서버가 서명한 배율을 브라우저에 보관 → 서버가 다시 켜져 배율이 옛 것(더 이전)이면 사본을 돌려줌
+   *  서버는 관리자 비밀번호로 서명을 확인하니 가짜 배율은 안 먹힘
+   */
+  keepRates(r, fromWelcome) {
+    if (!r || typeof r !== 'object' || typeof r._sig !== 'string') return;
+    let mine = null; try { mine = JSON.parse(localStorage.getItem('pf-rates-backup') || 'null'); } catch (e) { mine = null; }
+    if (fromWelcome && mine && typeof mine._sig === 'string' && (Number(mine._t) || 0) > (Number(r._t) || 0) && this.room && this.room.partyEmit) {
+      this.room.partyEmit('rates:restore', mine, (res) => { if (res && res.ok) this.game.log('⚡ 서버가 다시 켜져서, 저장해 둔 서버 배율을 되살렸어요', '#ffd86a'); });
+      return;
+    }
+    if (!mine || (Number(r._t) || 0) >= (Number(mine._t) || 0)) { try { localStorage.setItem('pf-rates-backup', JSON.stringify(r)); } catch (e) { /* 저장 불가 */ } }
   },
   // ---------------------------------------------------------------- 공용 월드 백업 (브라우저)
   //  무료 서버는 다시 배포(업데이트)할 때마다 저장 파일이 지워짐 → 접속자 브라우저에 30초마다 백업해 두고,
@@ -5040,7 +5063,11 @@ const autohunt = {
     const opts = (list, sel) => `<option value="">— 안 씀 —</option>` + [...new Set([...list, ...(sel ? [sel] : [])])].map((id) => `<option value="${id}" ${id === sel ? 'selected' : ''}>${ITEMS[id].name} (${inv.count(id)}개)</option>`).join('');
     const hpList = [...own((d) => d.heal && !d.buff && isConsumableItem(d)), ...shopHas((d) => d.heal && !d.buff && d.type === 'potion')];
     const mpList = [...own((d) => d.mp && d.type === 'potion'), ...shopHas((d) => d.mp && d.type === 'potion')];
-    const buffList = [...new Set([...own((d) => d.buff && isConsumableItem(d)), ...shopHas((d) => d.buff), ...c.buffs])];
+    // v59: 버프 아이템 전부 (고른 것 → 가진 것 → 물약 → 요리 순) — 없어도 미리 골라 둘 수 있음
+    const buffAll = Object.keys(ITEMS).filter((id) => { const d = ITEMS[id]; return d.buff && typeof d.buff === 'object' && isConsumableItem(d) && !d.autoMin; });
+    const bOrd = (id) => (c.buffs.includes(id) ? 0 : 1) * 4 + (inv.count(id) > 0 ? 0 : 1) * 2 + (ITEMS[id].type === 'potion' ? 0 : 1);
+    const buffList = buffAll.sort((a, b) => bOrd(a) - bOrd(b) || inv.count(b) - inv.count(a) || (ITEMS[a].name < ITEMS[b].name ? -1 : 1));
+    const shopIds = new Set(SHOPS.general.stock.map((s) => s.id));
     const box = document.createElement('div'); box.className = 'autoP';
     box.innerHTML = `
       <div class="apTop"><div><b>남은 시간</b> <span class="apTime">${this.fmt(this.time)}</span><br><small class="dimtxt">켜 둔 동안만 줄어요 · 이용권: 잡화점(1시간 150,000G) · 작업대 3단계 제작</small></div>
@@ -5053,8 +5080,10 @@ const autohunt = {
       <div class="apSec">🧪 자동 물약</div>
       <div class="apRow">체력 <select data-sel="hpPot">${opts(hpList, c.hpPot)}</select> <input type="number" min="5" max="95" step="5" data-num="hpPct" value="${c.hpPct}">% 아래면</div>
       <div class="apRow">마나 <select data-sel="mpPot">${opts(mpList, c.mpPot)}</select> <input type="number" min="5" max="95" step="5" data-num="mpPct" value="${c.mpPct}">% 아래면</div>
-      <div class="apSec">✨ 자동 버프 <small class="dimtxt">(효과가 끝나면 다시 먹기)</small></div>
-      <div class="apRow wrap">${buffList.map((id) => `<label class="apSk"><input type="checkbox" data-bf="${id}" ${c.buffs.includes(id) ? 'checked' : ''}> ${ITEMS[id].name} (${inv.count(id)})</label>`).join('') || '<small class="dimtxt">버프 물약 · 버프 요리가 없어요</small>'}</div>
+      <div class="apSec">✨ 자동 버프 <small class="dimtxt">(체크한 것의 효과가 끝나면 다시 먹기 · ${c.buffs.length}개 선택 · 가방에 없으면 건너뜀)</small>
+        <button data-bfall>가진 것 모두 켜기</button><button data-bfnone>모두 끄기</button></div>
+      <div class="apBuffs">${buffList.map((id) => { const d = ITEMS[id], n = inv.count(id); return `<label class="apBf${n ? '' : ' none'}${c.buffs.includes(id) ? ' on' : ''}" title="${escapeHtml(buffText(d.buff))}"><input type="checkbox" data-bf="${id}" ${c.buffs.includes(id) ? 'checked' : ''}> <b>${d.name}</b> <i>${n}개${shopIds.has(id) ? ' · 🛒' : ''}</i><br><small>${escapeHtml(statText(d.buff.stats))}</small></label>`; }).join('')}</div>
+      <p class="dimtxt small">🛒 = 잡화점에서 파는 것 (자동 보급으로 살 수 있음) · 여러 개를 켜 두면 효과가 끝난 것부터 하나씩 먹어요</p>
       <div class="apSec">🛒 자동 보급 · 판매</div>
       <div class="apRow"><label><input type="checkbox" data-ck="buy" ${c.buy ? 'checked' : ''}> 지정 물약 · 버프 아이템이</label> <input type="number" min="1" max="200" data-num="minPot" value="${c.minPot}">개 아래면 <input type="number" min="1" max="500" data-num="buyQty" value="${c.buyQty}">개 사기 <small class="dimtxt">(잡화점 값 +20%)</small></div>
       <div class="apRow"><label><input type="checkbox" data-ck="sell" ${c.sell ? 'checked' : ''}> 가방이 거의 차면 장비 팔기:</label> ${[0, 1, 2, 3].map((gr) => `<button data-sg="${gr}" class="${c.sellGrade === gr ? 'on' : ''}" style="color:${GRADES[gr].color}">${GRADES[gr].name} 이하</button>`).join('')}</div>
@@ -5068,11 +5097,92 @@ const autohunt = {
     box.querySelectorAll('[data-ck]').forEach((i) => { i.onchange = () => { c[i.dataset.ck] = i.checked; redraw(); }; });
     box.querySelectorAll('[data-sk]').forEach((i) => { i.onchange = () => { c.skills[i.dataset.sk] = i.checked; redraw(); }; });
     box.querySelectorAll('[data-bf]').forEach((i) => { i.onchange = () => { const id = i.dataset.bf; c.buffs = c.buffs.filter((x) => x !== id); if (i.checked) c.buffs.push(id); redraw(); }; });
+    const ba = box.querySelector('[data-bfall]'); if (ba) ba.onclick = () => { c.buffs = [...new Set([...c.buffs, ...buffList.filter((id) => inv.count(id) > 0)])]; redraw(); };
+    const bn = box.querySelector('[data-bfnone]'); if (bn) bn.onclick = () => { c.buffs = []; redraw(); };
     box.querySelectorAll('[data-sel]').forEach((s) => { s.onchange = () => { c[s.dataset.sel] = s.value || null; redraw(); }; });
     box.querySelectorAll('[data-num]').forEach((i) => { i.addEventListener('keydown', (e) => e.stopPropagation()); i.onchange = () => { const v = Math.max(+i.min, Math.min(+i.max, Math.round(+i.value) || +i.min)); c[i.dataset.num] = v; redraw(); }; });
   },
 };
 const isConsumableItem = (d) => d.type === 'potion' || d.type === 'food';
+
+</script>
+<script>
+// =====================================================================
+//  vault.js — 🔐 개인 금고 (캐릭터마다 · 비밀번호)
+//
+//  · 가방 창 [🔐 개인 금고] 버튼 → 마을 · 영지 · 집 안(안전 지대)에서 열 수 있음
+//  · 150칸 · 이 캐릭터만 쓰는 금고 (공용 영지의 창고 상자와 달리 다른 사람과 절대 섞이지 않음)
+//  · 비밀번호(숫자 4~8자리)를 걸면 열 때마다(게임을 켤 때 한 번) 물어봄 · 5번 틀리면 1분 잠김
+//  · 비밀번호는 그대로 저장하지 않고 암호화(해시)해서 저장
+// =====================================================================
+
+const VAULT_SIZE = 150;
+const vault = {
+  inv: new Inventory(VAULT_SIZE), pin: null, unlocked: false, fails: 0, lockUntil: 0,
+
+  init(game) { this.game = game; },
+  /** 비밀번호 → 해시 (캐릭터 이름을 섞어서) */
+  hash(pin) {
+    const s = 'pf-vault|' + (this.game.player ? this.game.player.name : '') + '|' + pin;
+    let h1 = 0x811c9dc5, h2 = 0x1234567;
+    for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619) >>> 0; h2 = Math.imul(h2 + c, 2654435761) >>> 0; }
+    for (let r = 0; r < 500; r++) { h1 = Math.imul(h1 ^ (h2 >>> 13), 16777619) >>> 0; h2 = Math.imul(h2 ^ (h1 >>> 7), 2246822519) >>> 0; }
+    return h1.toString(16).padStart(8, '0') + h2.toString(16).padStart(8, '0');
+  },
+  toJSON() { return { slots: this.inv.slots, pin: this.pin }; },
+  load(o) {
+    this.inv = new Inventory(VAULT_SIZE); this.inv.load({ slots: (o && o.slots) || [] });
+    this.pin = o && typeof o.pin === 'string' ? o.pin : null; this.unlocked = false; this.fails = 0; this.lockUntil = 0;
+  },
+  open() {
+    const g = this.game;
+    if (!g.safeZone) { g.log('🔐 개인 금고는 마을 · 영지 · 집 안(안전 지대)에서 열 수 있어요', '#ffb070'); sfx.deny(); return; }
+    if (this.pin && !this.unlocked) { this.ask((pin) => this.tryPin(pin)); return; }
+    ui.openStorage('vault', '🔐 개인 금고');
+  },
+  tryPin(pin) {
+    const g = this.game;
+    if (Date.now() < this.lockUntil) { g.log(`🔐 너무 많이 틀렸어요. ${Math.ceil((this.lockUntil - Date.now()) / 1000)}초 뒤에 다시 해 주세요`, '#ff9a8a'); sfx.deny(); return; }
+    if (this.hash(pin) === this.pin) { this.unlocked = true; this.fails = 0; sfx.select(); ui.openStorage('vault', '🔐 개인 금고'); return; }
+    this.fails++; sfx.deny();
+    if (this.fails >= 5) { this.lockUntil = Date.now() + 60000; this.fails = 0; g.log('🔐 비밀번호를 5번 틀려서 1분 동안 잠겼어요', '#ff9a8a'); }
+    else g.log(`🔐 비밀번호가 틀렸어요 (${this.fails}/5)`, '#ff9a8a');
+  },
+  /** 비밀번호 입력 창 (●●●● 로 가려짐) */
+  ask(done, title = '🔐 개인 금고 비밀번호', hint = '숫자 4~8자리') {
+    let el = $('vaultPin');
+    if (!el) { el = document.createElement('div'); el.id = 'vaultPin'; document.body.append(el); }
+    el.hidden = false;
+    el.innerHTML = `<div class="vpBox"><b>${title}</b><input type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="${hint}"><div class="vpRow"><button class="gold" data-ok>확인</button><button data-no>취소</button></div></div>`;
+    const inp = el.querySelector('input'), close = () => { el.hidden = true; el.innerHTML = ''; };
+    const ok = () => { const v = inp.value.trim(); if (!/^\d{4,8}$/.test(v)) { inp.value = ''; inp.placeholder = '숫자 4~8자리로 넣어 주세요'; return; } close(); done(v); };
+    inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') ok(); if (e.key === 'Escape') close(); });
+    el.querySelector('[data-ok]').onclick = ok; el.querySelector('[data-no]').onclick = close;
+    setTimeout(() => inp.focus(), 30);
+  },
+  setPin() {
+    const g = this.game;
+    const set = () => this.ask((a) => this.ask((b) => {
+      if (a !== b) { g.log('🔐 두 번 넣은 비밀번호가 달라요', '#ff9a8a'); sfx.deny(); return; }
+      this.pin = this.hash(a); this.unlocked = true; g.save(); g.log('🔐 개인 금고 비밀번호를 걸었어요 — 잊지 마세요!', '#9aff9a'); sfx.craft(); ui.render();
+    }, '🔐 새 비밀번호 한 번 더'), '🔐 새 비밀번호', '숫자 4~8자리');
+    if (this.pin) this.ask((cur) => { if (this.hash(cur) !== this.pin) { g.log('🔐 지금 비밀번호가 틀렸어요', '#ff9a8a'); sfx.deny(); return; } set(); }, '🔐 지금 비밀번호'); else set();
+  },
+  clearPin() {
+    const g = this.game; if (!this.pin) return;
+    this.ask((cur) => { if (this.hash(cur) !== this.pin) { g.log('🔐 비밀번호가 틀렸어요', '#ff9a8a'); sfx.deny(); return; } this.pin = null; g.save(); g.log('🔐 비밀번호를 없앴어요', '#c8c0b0'); ui.render(); }, '🔐 지금 비밀번호 (없애기)');
+  },
+  lock() { this.unlocked = false; ui.close(); this.game.log('🔐 개인 금고를 잠갔어요', '#c8c0b0'); },
+  /** 금고 창 위쪽 버튼 */
+  panel() {
+    const d = document.createElement('div'); d.className = 'bagNext vaultBar';
+    d.innerHTML = `<small>${this.pin ? '🔒 비밀번호가 걸려 있어요' : '⚠ 비밀번호가 없어요 — 걸어 두면 다른 사람이 못 열어요'}</small>`;
+    const b = (t, fn, cls = '') => { const x = document.createElement('button'); x.textContent = t; x.className = cls; x.onclick = fn; d.append(x); };
+    b(this.pin ? '비밀번호 바꾸기' : '🔐 비밀번호 걸기', () => this.setPin(), this.pin ? '' : 'gold');
+    if (this.pin) { b('비밀번호 없애기', () => this.clearPin()); b('🔒 지금 잠그기', () => this.lock()); }
+    return d;
+  },
+};
 
 </script>
 <script>
@@ -6878,13 +6988,19 @@ function buildHouse(h) {
 //    철괴 · 금괴                       : 작업대에서 철광석 · 금광석 제련 (금광석 = 바위 · 보급 상자)
 // =====================================================================
 
-const INV_MAX = 90;          // 가방 창에 보이는 최대 칸 (잠긴 칸 포함)
+const INV_MAX = 300;         // 가방 최대 칸 (v60: 90 → 300)
 const STORAGE_SIZE = 48;     // (이전 버전 공용 창고 크기 — 옛 세이브 옮기기용)
 const BAG_LEVELS = [
   { name: '기본 가방',      slots: 50, mats: {} },
   { name: '가죽 배낭',      slots: 60, mats: { hide: 5, thread: 3 },                        bench: false, desc: '동물 가죽을 실로 꿰맨 튼튼한 배낭' },
   { name: '모험가의 배낭',  slots: 72, mats: { tough_hide: 10, iron_ingot: 2 },             bench: true,  desc: '철 버클과 질긴 가죽으로 만든 여행용 배낭' },
   { name: '대용량 배낭',    slots: 90, mats: { magic_hide: 15, gold_ingot: 5, rare_thread: 5 }, bench: true, desc: '마력으로 안쪽을 넓힌 마법 배낭' },
+  // v60: 300칸까지 (모두 작업대 3단계)
+  { name: '마법 공간 배낭', slots: 120, mats: { magic_hide: 25, gold_ingot: 10, rare_thread: 15, essence: 2 }, bench: true, tier: 3, desc: '공간 마법을 새긴 배낭' },
+  { name: '차원 배낭',      slots: 150, mats: { magic_hide: 40, gold_ingot: 20, rare_thread: 25, essence: 5, mithril: 3 }, bench: true, tier: 3, desc: '미스릴 실로 차원을 꿰맨 배낭' },
+  { name: '용린 배낭',      slots: 200, mats: { magic_hide: 60, gold_ingot: 35, rare_thread: 40, essence: 10, dragon_scale: 5 }, bench: true, tier: 3, desc: '용의 비늘로 감싼 거대한 배낭' },
+  { name: '태초의 배낭',    slots: 250, mats: { magic_hide: 80, gold_ingot: 50, rare_thread: 60, essence: 20, primal_shard: 3 }, bench: true, tier: 3, desc: '태초의 결정이 박힌 배낭' },
+  { name: '무한의 배낭',    slots: 300, mats: { magic_hide: 120, gold_ingot: 80, rare_thread: 100, essence: 40, primal_shard: 10 }, bench: true, tier: 3, desc: '끝이 보이지 않는 전설의 배낭 (최대 300칸)' },
 ];
 
 // ---- 새 재료 (도트 아이콘)
@@ -8505,7 +8621,7 @@ const ui = {
   openStorage(key, name) { this.storageKey = key; this.storageName = (name || '창고').replace(/ \(.*$/, ''); this.open('storage'); },
   toggleMap() { this.current === 'map' ? this.close() : this.open('map'); },
   openInventory() { this.open('inventory'); },
-  openShop(npc) { this.npc = npc; this.shop = new Shop(npc.def.shop); this.tab = 'buy'; this.open('shop'); },
+  openShop(npc) { this.npc = npc; this.shop = new Shop(npc.def.shop); this.tab = 'buy'; this.multi = null; this.open('shop'); },
   openCraft(npc) { this.npc = npc; this.openStation('smithy'); },
   /** 제작대 창: cook(요리 화로) · alchemy(연금술 테이블) · smithy(대장간) — 그 제작대의 레시피만 */
   openStation(kind, key) { this.station = kind; this.stationKey = key || null; this.crafting = new Crafting(RECIPES.filter((r) => (r.station || 'smithy') === kind)); this.open('craft'); },
@@ -8564,9 +8680,11 @@ const ui = {
     }
     if (!selling) body.append(this.bagPanel(p, false));
     // 가방 칸: 쓸 수 있는 칸(maxSlots) + 잠긴 칸 (다음 가방 단계에서 해금)
+    if (selling) body.append(this.bulkSellBar(p));                            // v60: 일괄 판매
     const grid = document.createElement('div'); grid.className = 'grid';
     const fresh = this.fresh && performance.now() - this.fresh.t < 2500 ? this.fresh : null;
-    for (let i = 0; i < INV_MAX; i++) {
+    const shownMax = Math.min(INV_MAX, p.nextBag ? p.nextBag.slots : p.inv.size);   // 다음 가방까지만 잠긴 칸 표시
+    for (let i = 0; i < shownMax; i++) {
       const c = document.createElement('button');
       if (i >= p.inv.size) {
         const lv = BAG_LEVELS.findIndex((b) => b.slots > i);
@@ -8579,7 +8697,8 @@ const ui = {
       if (s && ITEMS[s.id].en) c.append(Object.assign(document.createElement('b'), { className: 'enb', textContent: '+' + ITEMS[s.id].en }));
       if (s && ITEMS[s.id].grade) { c.style.borderColor = gradeColor(s.id); c.style.boxShadow = `inset 0 0 6px ${gradeColor(s.id)}55`; }
       if (s) { c.append(itemIconCanvas(s.id)); if (s.qty > 1) c.append(Object.assign(document.createElement('i'), { textContent: s.qty })); c.title = ITEMS[s.id].name; }
-      c.onclick = () => { this.sel = s ? i : null; this.render(); };
+      if (selling && this.multi) { if (this.multi.has(i)) c.classList.add('pick'); c.onclick = () => { if (!s) return; this.multi.has(i) ? this.multi.delete(i) : this.multi.add(i); this.render(); }; }
+      else c.onclick = () => { this.sel = s ? i : null; this.render(); };
       grid.append(c);
     }
     body.append(grid);
@@ -8587,7 +8706,7 @@ const ui = {
     const info = document.createElement('div'); info.className = 'info';
     if (!s) {
       info.innerHTML = selling ? '<small>팔 아이템을 누르세요 (판매가 = 가격의 절반)</small>' : '<small>아이템을 누르면 장착 · 사용 · 버리기를 할 수 있어요</small>';
-      if (!selling) { const b = document.createElement('button'); b.textContent = '정리'; b.onclick = () => p.inv.sort(); info.append(b); }
+      if (!selling) { const b = document.createElement('button'); b.textContent = '정리'; b.onclick = () => p.inv.sort(); info.append(b); const v = document.createElement('button'); v.textContent = '🔐 개인 금고'; v.onclick = () => vault.open(); info.append(v); }
     } else {
       const d = ITEMS[s.id];
       info.innerHTML = `<b style="color:${gradeColor(s.id)}">${d.name}</b> ${s.qty > 1 ? 'x' + s.qty : ''} ${compareText(p, s.id)}<br><small>${itemInfo(s.id)}</small><br>`;
@@ -8607,9 +8726,49 @@ const ui = {
     body.append(info);
   },
 
+  /** v60: 일괄 판매 막대 — 등급 이하 장비 · 재료 · 음식 · 골라서 팔기 */
+  bulkSellBar(p) {
+    const inv = p.inv, box = document.createElement('div'); box.className = 'bulk';
+    const keep = (id) => { const d = ITEMS[id]; return d.set || d.en || d.autoMin || (d.tool && d.atk <= 3) || p.quick.includes(id); };   // 안 파는 것
+    const groups = [
+      ['일반 장비', (d, id) => isEquip(id) && (d.grade || 0) <= 0],
+      ['고급 이하 장비', (d, id) => isEquip(id) && (d.grade || 0) <= 1],
+      ['희귀 이하 장비', (d, id) => isEquip(id) && (d.grade || 0) <= 2],
+      ['재료 전부', (d) => d.type === 'material'],
+      ['음식 전부', (d) => d.type === 'food'],
+      ['씨앗 전부', (d) => d.type === 'seed'],
+    ];
+    const pick = (f) => inv.slots.map((s, i) => [s, i]).filter(([s]) => s && !keep(s.id) && f(ITEMS[s.id], s.id));
+    const worth = (list) => list.reduce((g, [s]) => g + sellPrice(s.id) * s.qty, 0);
+    const sellList = (list, label) => {
+      if (!list.length) return this.toast({ ok: false, msg: '팔 것이 없어요' });
+      const g = worth(list), n = list.reduce((a, [s]) => a + s.qty, 0);
+      if (!confirm(`${label}: ${n}개를 ${g.toLocaleString()}G 에 팔까요?`)) return;
+      for (const [, i] of list) inv.slots[i] = null;
+      inv.addGold(g); inv.onChange(); this.multi = null; this.sel = null; this.toast({ ok: true, msg: `${label} ${n}개 판매 (+${g.toLocaleString()}G)` }); sfx.coin(); this.render();
+    };
+    const head = document.createElement('div'); head.className = 'bulkHead';
+    head.innerHTML = '<b>💰 일괄 판매</b> <small class="dimtxt">(세트 · 강화 장비 · 생활 도구 · 퀵슬롯 · 이용권은 빼고)</small>';
+    box.append(head);
+    const row = document.createElement('div'); row.className = 'bulkRow';
+    for (const [label, f] of groups) { const list = pick(f); const b = document.createElement('button'); b.innerHTML = `${label} <small>${list.length ? worth(list).toLocaleString() + 'G' : '-'}</small>`; b.disabled = !list.length; b.onclick = () => sellList(pick(f), label); row.append(b); }
+    box.append(row);
+    const row2 = document.createElement('div'); row2.className = 'bulkRow';
+    const m = document.createElement('button');
+    if (this.multi) {
+      const list = [...this.multi].map((i) => [inv.slots[i], i]).filter(([s]) => s);
+      m.textContent = '선택 취소'; m.onclick = () => { this.multi = null; this.render(); };
+      const go = document.createElement('button'); go.className = 'gold'; go.disabled = !list.length; go.textContent = `✔ 고른 ${list.length}칸 판매 +${worth(list).toLocaleString()}G`; go.onclick = () => sellList(list, '고른 아이템');
+      const all = document.createElement('button'); all.textContent = '보이는 것 모두 고르기'; all.onclick = () => { this.multi = new Set(inv.slots.map((s, i) => (s && !keep(s.id) ? i : -1)).filter((i) => i >= 0)); this.render(); };
+      row2.append(m, all, go, Object.assign(document.createElement('small'), { className: 'dimtxt', textContent: ' 아래 칸을 눌러 고르고 빼기' }));
+    } else { m.textContent = '☑ 골라서 여러 개 팔기'; m.onclick = () => { this.multi = new Set(); this.sel = null; this.render(); }; row2.append(m); }
+    box.append(row2);
+    return box;
+  },
+
   /** 창고: 가방 ↔ 창고 (누르면 한 묶음씩 옮김) */
   renderStorage(body, p) {
-    const st = this.storageKey === 'ranch' ? ranch.store : this.game.housing.storages.get(this.storageKey); if (!st) { body.textContent = '창고를 찾을 수 없어요'; return; }
+    const st = this.storageKey === 'vault' ? vault.inv : this.storageKey === 'ranch' ? ranch.store : this.game.housing.storages.get(this.storageKey); if (!st) { body.textContent = '창고를 찾을 수 없어요'; return; }
     const inv = p.inv;
     const top = document.createElement('div'); top.className = 'bagp';
     top.innerHTML = `<div class="bagHead"><b>📦 ${this.storageName || '창고'}</b> <span>${st.used} / ${st.size}칸</span><span class="bagBar"><i style="width:${100 * st.used / st.size}%"></i></span>` +
@@ -8619,7 +8778,7 @@ const ui = {
     const move = (from, to, i) => { const s = from.slots[i]; if (!s) return 0; const left = to.add(s.id, s.qty); if (left < s.qty) from.removeAt(i, s.qty - left); return left; };
     btn('재료 · 씨앗 모두 넣기', () => { inv.slots.forEach((s, i) => { if (s && ['material', 'seed'].includes(ITEMS[s.id].type)) move(inv, st, i); }); });
     btn('창고 정렬', () => st.sort());
-    top.append(bar); body.append(top);
+    top.append(bar); if (this.storageKey === 'vault') top.append(vault.panel()); body.append(top);
     const grid = (title, from, to, n, cls) => {
       const h = document.createElement('div'); h.className = 'setSec'; h.textContent = title; body.append(h);
       const g = document.createElement('div'); g.className = 'grid ' + cls;
@@ -9195,7 +9354,7 @@ class Game {
     for (const n of this.world.npcs) this.world.solid[this.world.idx(Math.floor(n.x / T), Math.floor(n.y / T))] = 1;
     this.villagers = [new Villager((TOWN.cx - 4) * T, (TOWN.cy + 3) * T), new Villager((TOWN.cx + 5) * T, (TOWN.cy + 6) * T)];
     settings.load(); slots.load();
-    ui.init(this); title.init(); party.init(this); trade.init(this); ranch.init(this); autohunt.init(this); online.init(this);
+    ui.init(this); title.init(); party.init(this); trade.init(this); ranch.init(this); autohunt.init(this); vault.init(this); online.init(this);
     input.onTouchTap = (x, y) => this.touchTap(x, y);
     this.ready = true;
     title.show();
@@ -9220,7 +9379,7 @@ class Game {
       this.farm.load(s.save.farm);
       this.housing.load(this.estate, s.save.home);
       this.estateFarm.load(s.save.efarm);
-      ranch.load(s.save.ranch); autohunt.load(s.save.auto);
+      ranch.load(s.save.ranch); autohunt.load(s.save.auto); vault.load(s.save.vault);
       // 이전 버전 공용 창고 → 첫 창고 상자로 (상자가 없으면 대형 창고 상자를 선물로)
       const old = ((s.save.storage && s.save.storage.slots) || []).filter(Boolean);
       if (old.length && !(s.save.home && s.save.home.storages)) {
@@ -9236,7 +9395,7 @@ class Game {
     } else {
       p.inv.add('potion', 3); p.inv.addGold(150); p.quick[0] = 'potion';     // 도구는 잡화점에서 사요
       this.farm.load([]);
-      this.housing.load(this.estate, null); this.estateFarm.load([]); ranch.load(null); autohunt.load(null);
+      this.housing.load(this.estate, null); this.estateFarm.load([]); ranch.load(null); autohunt.load(null); vault.load(null);
       this.clock.load(null); this.fog.load(null);
       this.log(`${s.name}의 모험이 시작됩니다!`, '#ffe8b0');
       this.log('집 문 앞에서 E(또는 클릭)로 건물에 들어갈 수 있어요.', '#ffe8b0');
@@ -9311,7 +9470,7 @@ class Game {
     // 실내에서 저장하면 들어간 문 앞 위치로 (영지 안의 집이면 영지에서 이어하기)
     const at = this.indoor ? { map: this.world.returnMap, x: this.world.exitTo.x, y: this.world.exitTo.y } : { map: this.world, x: p.x, y: p.y };
     const ox = p.x, oy = p.y; p.x = at.x; p.y = at.y;
-    slots.write(this.slot, p, { farm: this.farm.toJSON(), efarm: this.estateFarm.toJSON(), home: this.housing.toJSON(), ranch: ranch.toJSON(), auto: autohunt.toJSON(),
+    slots.write(this.slot, p, { farm: this.farm.toJSON(), efarm: this.estateFarm.toJSON(), home: this.housing.toJSON(), ranch: ranch.toJSON(), auto: autohunt.toJSON(), vault: vault.toJSON(),
       clock: this.clock.toJSON(), fog: this.fog.toJSON(), map: at.map && at.map.isEstate ? 'estate' : 'field', ...(online.saveExtra(this) || {}) });   // 온라인 공용 월드: 개인 영지는 그대로
     p.x = ox; p.y = oy;
   }

@@ -31,17 +31,25 @@ const fs = require('fs');
 const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
+const crypto = require('crypto');
 
 const PORT = Number(process.env.PORT) || 3000;
 const MAX_PLAYERS = Number(process.env.MAX_PLAYERS) || 60;
 const DATA = process.env.DATA_FILE || path.join(__dirname, 'data', 'world.json');
-const SERVER_VERSION = 'v57';   // ◀ 게임 버전과 같게 (/status 에 표시 → 업데이트가 됐는지 확인)
+const SERVER_VERSION = 'v60';   // ◀ 게임 버전과 같게 (/status 에 표시 → 업데이트가 됐는지 확인)
 const SEASON = String(process.env.SEASON || '').slice(0, 20);          // ◀ 시즌 번호 — Render 환경 변수 SEASON 을 바꾸면(1 → 2 …) 접속하는 모든 사람의 캐릭터가 초기화됨
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '1234';           // ◀ 서버 배율을 바꿀 때 쓰는 관리자 비밀번호 (Render 환경 변수 ADMIN_PASSWORD 로 바꾸세요)
 const RATE_KEYS = ['xp', 'gold', 'drop', 'gather', 'enh', 'elite', 'respawn', 'pdmg', 'mhp', 'matk', 'd_knight', 'd_rogue', 'd_wizard', 'd_thief', 'd_priest'];   // pdmg 플레이어 공격력 · mhp 몬스터 체력 · matk 몬스터 공격력
 /** 서버 배율 검사: 알려진 키 · 0.1 ~ 100 */
 /** 시즌 = 환경 변수 SEASON + 관리자 페이지에서 초기화한 시각(t) — 둘 중 하나라도 새로우면 접속자의 캐릭터가 지워짐 */
 function seasonInfo() { return { env: SEASON, t: Number(world.seasonT) || 0 }; }
+/**
+ * 서버 배율 서명 (v58) — 무료 Render 는 업데이트할 때마다 저장 파일이 지워짐 →
+ *  배율을 관리자 비밀번호로 서명해서 접속자 브라우저에 보관 → 서버가 새로 켜지면 그 사본을 받아 서명이 맞을 때만 되살림 (가짜 배율은 거절)
+ */
+const rateSig = (r) => crypto.createHmac('sha256', 'rates:' + ADMIN_PASSWORD).update(RATE_KEYS.map((k) => k + '=' + r[k]).join('&')).digest('hex').slice(0, 32);
+const signedRates = () => ({ ...world.rates, _sig: rateSig(world.rates), _t: world.ratesT || 0 });
+let ratesSet = false;                                                   // 이번에 켜진 뒤 관리자가 배율을 바꿨나 (바꿨으면 옛 사본으로 덮지 않음)
 function cleanRates(r) {
   const o = {}; if (!r || typeof r !== 'object') return null;
   for (const k of RATE_KEYS) { const v = Number(r[k]); o[k] = isFinite(v) && v >= 0.1 && v <= 100 ? Math.round(v * 10) / 10 : 1; }
@@ -50,7 +58,7 @@ function cleanRates(r) {
 
 const app = express();
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'], maxAge: 0, setHeaders: (res, f) => { if (/\.(html|js)$/.test(f)) res.setHeader('Cache-Control', 'no-store'); } }));
-app.get('/status', (req, res) => res.json({ version: SERVER_VERSION, players: players.size, parties: parties.size, trades: trades.size, host: hostId, rates: world.rates, season: seasonInfo() }));
+app.get('/status', (req, res) => res.json({ version: SERVER_VERSION, players: players.size, parties: parties.size, trades: trades.size, host: hostId, rates: signedRates(), season: seasonInfo() }));
 const startedAt = Date.now();
 
 // ---------------------------------------------------------------- 관리자 페이지 (/admin)
@@ -70,13 +78,13 @@ app.get('/api/admin/state', (req, res) => {
     const s = p.state || {};
     return { id, name: p.name, cls: s.cls || null, lv: s.lv || null, map: s.map || null, hp: typeof s.hp === 'number' ? s.hp : null, party: p.party, host: id === hostId, since: p.joinedAt };
   });
-  res.json({ ok: true, players: list, max: MAX_PLAYERS, parties: [...parties.keys()].map(partyInfo), rates: world.rates, season: seasonInfo(), uptime: Date.now() - startedAt,
+  res.json({ ok: true, players: list, max: MAX_PLAYERS, parties: [...parties.keys()].map(partyInfo), rates: signedRates(), season: seasonInfo(), uptime: Date.now() - startedAt,
     world: { tiles: Object.keys(world.tiles).length, furn: world.furn.length, farm: Object.keys(world.farm).length + Object.keys(world.efarm).length } });
 });
 app.post('/api/admin/rates', (req, res) => {
   if (!adminOk(req, res)) return;
   const r = cleanRates(req.body && req.body.rates); if (!r) return res.json({ ok: false, msg: '배율 값이 이상해요' });
-  world.rates = r; dirty = true; io.emit('rates', r); log(`서버 배율 변경 (관리자 페이지) ${JSON.stringify(r)}`);
+  world.rates = r; world.ratesT = Date.now(); ratesSet = true; dirty = true; io.emit('rates', signedRates()); log(`서버 배율 변경 (관리자 페이지) ${JSON.stringify(r)}`);
   res.json({ ok: true, rates: r });
 });
 app.post('/api/admin/notice', (req, res) => {
@@ -256,7 +264,7 @@ io.on('connection', (sock) => {
   const id = sock.id, guest = '모험가' + String(guestNo++).padStart(3, '0');
   players.set(id, { name: guest, state: null, joinedAt: Date.now(), party: null, invites: new Map(), trade: null, treqs: new Map() });
   const others = {}; for (const [k, p] of players) if (k !== id && p.state) others[k] = p.state;
-  sock.emit('welcome', { id, guest, host: hostId, players: others, world: snapshot(), rates: world.rates, season: seasonInfo() });
+  sock.emit('welcome', { id, guest, host: hostId, players: others, world: snapshot(), rates: signedRates(), season: seasonInfo() });
   log(`접속 ${guest} ${id} (현재 ${players.size}명)`);
 
   const okMove = limiter(30), okAct = limiter(20), okWorld = limiter(30);
@@ -277,6 +285,15 @@ io.on('connection', (sock) => {
     if (!okWorld()) return;
     const clean = applyOp(op); if (!clean) return;
     dirty = true; sock.broadcast.emit('worldOp', { id, op: clean });
+  });
+  // ---- 서명된 배율 사본으로 되살리기 (서버가 다시 켜져 배율이 기본값일 때 · 관리자 비밀번호로 서명된 것만)
+  sock.on('rates:restore', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    if (ratesSet || envRates || !d || typeof d !== 'object') return reply({ ok: false });
+    const r = cleanRates(d); if (!r || d._sig !== rateSig(r)) return reply({ ok: false, msg: '서명이 맞지 않아요' });
+    const t = Number(d._t) || 0; if (t <= (world.ratesT || 0)) return reply({ ok: false });        // 더 새로운 것만
+    world.rates = r; world.ratesT = t; dirty = true; saveWorld(); io.emit('rates', signedRates());
+    log(`서버 배율을 사본으로 되살렸어요 ${JSON.stringify(r)}`); reply({ ok: true });
   });
   // ---- 백업으로 공용 월드 되살리기 (서버가 다시 켜져 비었을 때 · 같은 시즌의 백업만)
   const okRestore = limiter(2);
@@ -412,7 +429,7 @@ io.on('connection', (sock) => {
     if (!okRate() || !d || typeof d !== 'object') return reply({ ok: false, msg: '잠시 뒤 다시 해 주세요' });
     if (d.pass !== ADMIN_PASSWORD) { log(`배율 변경 거부 (비밀번호 틀림) ${id}`); return reply({ ok: false, msg: '서버 관리자 비밀번호가 틀렸어요' }); }
     const r = cleanRates(d.rates); if (!r) return reply({ ok: false, msg: '배율 값이 이상해요' });
-    world.rates = r; dirty = true; io.emit('rates', r);
+    world.rates = r; world.ratesT = Date.now(); ratesSet = true; dirty = true; io.emit('rates', signedRates());
     log(`서버 배율 변경 ${JSON.stringify(r)} by ${players.get(id) ? players.get(id).name : id}`);
     reply({ ok: true });
   });
