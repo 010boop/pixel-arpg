@@ -20,6 +20,7 @@
 //   party:*     파티 (초대 · 수락 · 거절 · 나가기 · 추방 · 파티원끼리 행동: 경험치 공유 · 치유 · 버프 · 파티 채팅) — 최대 5명
 //   관리자 페이지  https://내주소/admin  (admin.html · 비밀번호 = ADMIN_PASSWORD)
 //               접속자 목록 · 서버 배율 · 시즌 초기화(모든 캐릭터 삭제) · 공지 · 강퇴  → /api/admin/* (헤더 x-admin-pass)
+//   trade:*     1:1 거래 (신청 · 수락 · 올리기 · 확정 · 교환 · 취소) — 둘 다 [확정] 뒤 둘 다 [교환] 을 눌러야 성사
 //   adminAuth   관리자 창 열기 (주소에 ?admin · 서버 비밀번호 확인)
 //   setRates    관리자 비밀번호 + 서버 배율(경험치 · 골드 · 드롭 …) → 저장하고 모두에게 'rates' (접속한 모든 사람에게 적용)
 //   disconnect  나감                                               → 'playerLeft'
@@ -48,7 +49,7 @@ function cleanRates(r) {
 
 const app = express();
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'], maxAge: 0 }));
-app.get('/status', (req, res) => res.json({ players: players.size, parties: parties.size, host: hostId, rates: world.rates, season: seasonInfo() }));
+app.get('/status', (req, res) => res.json({ players: players.size, parties: parties.size, trades: trades.size, host: hostId, rates: world.rates, season: seasonInfo() }));
 const startedAt = Date.now();
 
 // ---------------------------------------------------------------- 관리자 페이지 (/admin)
@@ -195,6 +196,28 @@ const players = new Map();            // id → { name, state, joinedAt, party, 
 const PARTY_MAX = 5;
 const parties = new Map();            // 파티 id → { leader, members: Set }
 let partyNo = 1;
+// ---------------------------------------------------------------- 거래
+const trades = new Map();              // tid → { a, b, offer: { [id]: { items, gold } }, lock: {}, ok: {} }
+let tradeNo = 1;
+function tradeView(T, me) {             // me 가 보는 거래 상태
+  const them = T.a === me ? T.b : T.a, pm = players.get(me), pt = players.get(them);
+  return { tid: T.tid, me: { name: pm ? pm.name : '?', ...T.offer[me], lock: !!T.lock[me], ok: !!T.ok[me] }, them: { id: them, name: pt ? pt.name : '?', ...T.offer[them], lock: !!T.lock[them], ok: !!T.ok[them] } };
+}
+function sendTrade(T) { for (const m of [T.a, T.b]) io.to(m).emit('trade', tradeView(T, m)); }
+function endTrade(tid, msg) {
+  const T = trades.get(tid); if (!T) return; trades.delete(tid);
+  for (const m of [T.a, T.b]) { const q = players.get(m); if (q && q.trade === tid) q.trade = null; io.to(m).emit('trade', null); if (msg) io.to(m).emit('tradeMsg', msg); }
+}
+function cleanOffer(d) {
+  if (!d || typeof d !== 'object' || !Array.isArray(d.items) || d.items.length > 12) return null;
+  const items = [];
+  for (const it of d.items) {
+    if (!it || typeof it.id !== 'string' || !/^[a-z0-9_]{1,48}(\+\d{1,2})?$/i.test(it.id) || !int(it.qty, 1, 9999)) return null;
+    const same = items.find((x) => x.id === it.id); if (same) same.qty = Math.min(9999, same.qty + it.qty); else items.push({ id: it.id, qty: it.qty });
+  }
+  const gold = d.gold === undefined ? 0 : d.gold; if (!int(gold, 0, 1e9)) return null;
+  return { items, gold };
+}
 function partyInfo(pid) {
   const P = parties.get(pid); if (!P) return null;
   return { id: pid, leader: P.leader, members: [...P.members].map((id) => ({ id, name: (players.get(id) || {}).name || '?' })) };
@@ -227,7 +250,7 @@ function limiter(n) { let t = Date.now(), c = 0; return () => { const now = Date
 io.on('connection', (sock) => {
   if (players.size >= MAX_PLAYERS) { sock.emit('full', MAX_PLAYERS); sock.disconnect(true); return; }
   const id = sock.id, guest = '모험가' + String(guestNo++).padStart(3, '0');
-  players.set(id, { name: guest, state: null, joinedAt: Date.now(), party: null, invites: new Map() });
+  players.set(id, { name: guest, state: null, joinedAt: Date.now(), party: null, invites: new Map(), trade: null, treqs: new Map() });
   const others = {}; for (const [k, p] of players) if (k !== id && p.state) others[k] = p.state;
   sock.emit('welcome', { id, guest, host: hostId, players: others, world: snapshot(), rates: world.rates, season: seasonInfo() });
   log(`접속 ${guest} ${id} (현재 ${players.size}명)`);
@@ -303,6 +326,55 @@ io.on('connection', (sock) => {
     for (const m of P.members) if (m !== id) io.to(m).emit('partyAct', { id, d });
   });
 
+  // ---- 거래
+  const okTrade = limiter(10);
+  sock.on('trade:req', (d, ack) => {
+    const reply = ackOf(ack), me = players.get(id), to = d && typeof d.to === 'string' ? d.to : '', them = players.get(to);
+    if (!okTrade() || !me) return reply({ ok: false, msg: '잠시 뒤 다시 해 주세요' });
+    if (!them || !them.state || to === id) return reply({ ok: false, msg: '그 사람을 찾을 수 없어요' });
+    if (me.trade) return reply({ ok: false, msg: '이미 거래 중이에요' });
+    if (them.trade) return reply({ ok: false, msg: `${them.name}님은 다른 사람과 거래 중이에요` });
+    them.treqs.set(id, Date.now());
+    io.to(to).emit('tradeReq', { from: id, name: me.name });
+    reply({ ok: true, msg: `${them.name}님에게 거래를 신청했어요` });
+  });
+  sock.on('trade:accept', (d, ack) => {
+    const reply = ackOf(ack), me = players.get(id), from = d && typeof d.from === 'string' ? d.from : '', them = players.get(from);
+    if (!okTrade() || !me) return reply({ ok: false });
+    const t = me.treqs.get(from); me.treqs.delete(from);
+    if (!t || Date.now() - t > 30000 || !them) return reply({ ok: false, msg: '거래 신청이 만료됐어요' });
+    if (me.trade || them.trade) return reply({ ok: false, msg: '둘 중 한 명이 이미 거래 중이에요' });
+    const tid = 't' + tradeNo++, T = { tid, a: from, b: id, offer: { [from]: { items: [], gold: 0 }, [id]: { items: [], gold: 0 } }, lock: {}, ok: {} };
+    trades.set(tid, T); me.trade = them.trade = tid;
+    log(`거래 시작 ${them.name} ↔ ${me.name}`); sendTrade(T); reply({ ok: true });
+  });
+  sock.on('trade:decline', (d) => { const me = players.get(id), from = d && typeof d.from === 'string' ? d.from : ''; if (!me || !me.treqs.delete(from)) return; io.to(from).emit('tradeMsg', `${me.name}님이 거래를 거절했어요`); });
+  const myTrade = () => { const me = players.get(id), T = me && me.trade && trades.get(me.trade); return T || null; };
+  sock.on('trade:offer', (d) => {
+    const T = myTrade(); if (!T || !okTrade()) return;
+    if (T.lock[id]) return;                                    // 확정한 뒤엔 못 바꿈
+    const o = cleanOffer(d); if (!o) return;
+    T.offer[id] = o; T.lock = {}; T.ok = {};                   // 바뀌면 둘 다 다시 확정
+    sendTrade(T);
+  });
+  sock.on('trade:lock', () => { const T = myTrade(); if (!T || !okTrade()) return; T.lock[id] = true; sendTrade(T); });
+  sock.on('trade:confirm', () => {
+    const T = myTrade(); if (!T || !okTrade()) return;
+    if (!T.lock[T.a] || !T.lock[T.b]) return;                  // 둘 다 확정해야 교환 가능
+    T.ok[id] = true;
+    if (T.ok[T.a] && T.ok[T.b]) {                              // 성사: 각자에게 줄 것 · 받을 것
+      for (const [m, o] of [[T.a, T.b], [T.b, T.a]]) io.to(m).emit('tradeDone', { give: T.offer[m], get: T.offer[o], with: (players.get(o) || {}).name || '?' });
+      const pa = players.get(T.a), pb = players.get(T.b);
+      log(`거래 성사 ${pa ? pa.name : T.a} ↔ ${pb ? pb.name : T.b} ${JSON.stringify(T.offer[T.a])} ↔ ${JSON.stringify(T.offer[T.b])}`);
+      trades.delete(T.tid); if (pa) pa.trade = null; if (pb) pb.trade = null;
+    } else sendTrade(T);
+  });
+  sock.on('trade:cancel', (d) => {
+    const T = myTrade(); if (!T) return;
+    const me = players.get(id), why = d && typeof d.why === 'string' ? d.why.slice(0, 60) : '';
+    endTrade(T.tid, `${me ? me.name : '상대'}님이 거래를 취소했어요${why ? ` (${why})` : ''}`);
+  });
+
   let authFails = 0;
   sock.on('adminAuth', (d, ack) => {                   // 관리자 창 열기 (서버 주인만 · 비밀번호는 서버만 앎)
     const reply = typeof ack === 'function' ? ack : () => {};
@@ -322,6 +394,7 @@ io.on('connection', (sock) => {
   });
   sock.on('disconnect', () => {
     leaveParty(id);
+    const tp = players.get(id); if (tp && tp.trade) endTrade(tp.trade, '상대가 나가서 거래가 취소됐어요');
     const p = players.get(id); players.delete(id);
     io.emit('playerLeft', { id });
     log(`나감 ${p ? p.name : id} (현재 ${players.size}명)`);

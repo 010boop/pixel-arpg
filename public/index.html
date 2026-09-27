@@ -86,7 +86,8 @@
   #buildBar .bHead{display:flex;gap:5px;margin-bottom:5px;align-items:center}
   #buildBar .bHead button{padding:3px 10px;font-size:13px} #buildBar .bHead button.on{background:#6a4a1a;border-color:var(--gold);color:#fff3d0}
   #buildBar .bHead button.warn.on{background:#7a2a1a;border-color:#ff9a7a} #buildBar .bHead button:last-child{margin-left:auto}
-  #buildBar .bList{display:flex;gap:6px;overflow-x:auto;padding-bottom:3px;touch-action:pan-x}
+  #buildBar .bWrap{display:flex;gap:4px;align-items:stretch} #buildBar .bArrow{flex:none;width:26px;padding:0;font-size:12px}
+  #buildBar .bList{display:flex;gap:6px;overflow-x:auto;padding-bottom:3px;touch-action:pan-x;flex:1;min-width:0;scroll-behavior:auto}
   #buildBar .bItem{display:flex;align-items:center;gap:5px;padding:3px 7px 3px 3px;min-width:132px;text-align:left;flex:none}
   #buildBar .bItem.on{background:#6a4a1a;border-color:var(--gold)} #buildBar .bItem.poor{opacity:.6}
   #buildBar .bItem canvas{background:#15100c;border-radius:4px;image-rendering:pixelated;flex:none}
@@ -120,6 +121,17 @@
   #bParty.on{border-color:#6ad86a;box-shadow:0 0 8px #6ad86a88} #bParty[data-n]:not([data-n=""])::after{content:attr(data-n);position:absolute;right:-4px;top:-4px;background:#3a9a3a;color:#fff;font-size:10px;border-radius:8px;padding:0 4px}
   #notice{position:fixed;left:50%;top:96px;transform:translateX(-50%);z-index:37;max-width:min(640px,92vw);background:rgba(60,40,10,.94);border:2px solid var(--gold);border-radius:10px;padding:10px 16px;font-size:16px;font-weight:bold;color:#ffe8a0;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.55);pointer-events:none}
   #notice[hidden]{display:none} #notice.pop{animation:noticeIn .4s ease-out} @keyframes noticeIn{0%{opacity:0;transform:translate(-50%,-10px)}100%{opacity:1;transform:translate(-50%,0)}}
+  #trade{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:38;width:min(620px,96vw);max-height:92vh;overflow:auto;background:rgba(30,24,16,.97);border:2px solid var(--gold);border-radius:12px;padding:10px 12px;font-size:13px;box-shadow:0 10px 40px rgba(0,0,0,.6)}
+  #trade[hidden],#tradeReq[hidden]{display:none} #trade .trHead{display:flex;align-items:center;gap:8px;margin-bottom:8px} #trade .trHead b{flex:1;color:var(--gold);font-size:15px}
+  #trade .trCols{display:grid;grid-template-columns:1fr 1fr;gap:8px} #trade .trCol{background:#1a140e;border:1px solid var(--edge);border-radius:8px;padding:6px;min-height:120px;display:flex;flex-direction:column}
+  #trade .trTitle{font-weight:bold;color:#f0dcb0;margin-bottom:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap} #trade .trItems{flex:1;display:flex;flex-direction:column;gap:3px}
+  #trade .trIt{display:flex;align-items:center;gap:5px;padding:2px 6px 2px 2px;text-align:left;font-size:12px} #trade .trIt.them{cursor:default} #trade .trIt span{flex:1} #trade .trIt canvas{flex:none}
+  #trade .trGold{margin-top:6px} #trade .trGold input{width:90px;background:#120d09;color:#f0e6d0;border:1px solid #5a4430;border-radius:4px;padding:3px 5px}
+  #trade .trOk{color:#9aff9a;font-size:11px} #trade .trLock{color:var(--gold);font-size:11px} #trade .trBtns{text-align:center;margin:8px 0}
+  #trade .trBtns button{padding:6px 22px;font-size:14px} #trade .trBag{display:flex;flex-wrap:wrap;gap:3px} #trade .trB{position:relative;width:34px;height:34px;padding:2px}
+  #trade .trB.used{opacity:.35} #trade .trB i{position:absolute;right:1px;bottom:0;font-size:10px;font-style:normal;color:#fff;text-shadow:0 0 2px #000}
+  #tradeReq{position:fixed;left:50%;top:110px;transform:translateX(-50%);z-index:36;font-size:13px;display:flex;gap:6px;align-items:center;background:#3a2c14;border:1px solid var(--gold);border-radius:8px;padding:6px 8px;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+  body.intitle #trade,body.intitle #tradeReq{display:none!important}
   body.intitle #bParty,body.intitle #party,body.intitle #partyInvite{display:none!important}
   #party{position:fixed;right:10px;top:58px;width:min(360px,94vw);max-height:calc(100vh - 150px);overflow:auto;z-index:35;background:rgba(20,26,18,.96);border:1px solid #6ad86a;border-radius:10px;font-size:12px;box-shadow:0 6px 24px rgba(0,0,0,.5)}
   #party[hidden],#partyInvite[hidden]{display:none} #party .ptHead{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #3a5a30;position:sticky;top:0;background:#142010}
@@ -244,6 +256,8 @@
 <div id="party" hidden></div>
 <div id="partyInvite" hidden></div>
 <div id="notice" hidden></div>
+<div id="trade" hidden></div>
+<div id="tradeReq" hidden></div>
 <button class="btn" id="bMap" title="월드 맵 (M)">🗺</button>
 <button class="btn" id="bAtk">공격</button>
 <button class="btn" id="bRoll">구르기</button>
@@ -2443,6 +2457,7 @@ const builder = {
   render(game) {
     const bar = $('buildBar'); if (!bar) return;
     const inv = game.player.inv;
+    const old = bar.querySelector('.bList'), keep = old && old.dataset.cat === String(this.cat) ? old.scrollLeft : 0;   // 1초마다 다시 그려도 옆으로 넘긴 위치 유지
     bar.innerHTML = '';
     const head = document.createElement('div'); head.className = 'bHead';
     for (const c of this.cats(game)) {
@@ -2454,7 +2469,8 @@ const builder = {
     er.onclick = () => { this.erase = !this.erase; this.render(game); sfx.select(); }; head.append(er);
     const x = document.createElement('button'); x.textContent = '✕'; x.title = '건축 끝내기 (H)'; x.onclick = () => this.close(game); head.append(x);
     bar.append(head);
-    const list = document.createElement('div'); list.className = 'bList';
+    const list = document.createElement('div'); list.className = 'bList'; list.dataset.cat = String(this.cat);
+    list.addEventListener('wheel', (e) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { list.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });   // 마우스 휠 = 옆으로
     for (const [id, p] of Object.entries(BUILD_PARTS)) {
       if (p.cat !== this.cat) continue;
       const can = this.affordable(inv, id);
@@ -2465,7 +2481,10 @@ const builder = {
       b.onclick = () => { this.sel = id; this.erase = false; if (p.kind === 'roof' && !game.indoor) { game.housing.roofStyle = p.style; game.housing.refresh(game.world); online.worldOp({ op: 'roof', style: p.style }); game.save(); } this.render(game); sfx.select(); };
       list.append(b);
     }
-    bar.append(list);
+    const wrap = document.createElement('div'); wrap.className = 'bWrap';
+    const arrow = (d, t) => { const a = document.createElement('button'); a.className = 'bArrow'; a.textContent = t; a.onclick = () => list.scrollBy({ left: d * list.clientWidth * 0.8, behavior: 'smooth' }); return a; };
+    wrap.append(arrow(-1, '◀'), list, arrow(1, '▶')); bar.append(wrap);
+    list.scrollLeft = keep;
     const tip = document.createElement('div'); tip.className = 'bTip';
     tip.textContent = game.indoor ? '클릭: 놓기 · 우클릭: 치우기 · 벽 장식은 윗벽 줄에 · 침대에서 쉬면 저장' : '클릭: 짓기 · 우클릭: 철거 · 벽을 쌓으면 지붕·창문이 자동으로 얹혀요 (지붕 종류를 누르면 전체 지붕이 바뀜) · 벽 아래 줄에 문을 달면 집 완성!';
     bar.append(tip);
@@ -3544,7 +3563,7 @@ const online = {
     this.room.onConnection((c) => { if (this.room && !this.kicked) { this.status = c ? 'online' : 'connecting'; if (!c) this.remotes.clear(); this.last = ''; this.renderPanel(); } }, dead);
     this.room.onPeers((ch) => this.sync(ch.peers), dead);
     if (this.room.on) {                                                          // 서버 전용: 행동 · 공용 월드
-      if (this.room.partyEmit) party.bind(this.room);
+      if (this.room.partyEmit) { party.bind(this.room); trade.bind(this.room); }
       this.room.on('season', (sv) => this.checkSeason(sv));                      // 관리자 페이지: 시즌 초기화 (지금 접속 중인 사람도)
       this.room.on('notice', (m) => this.notice(m && m.text));                   // 관리자 공지
       this.room.on('kicked', (m) => { this.kicked = true; this.status = 'offline'; this.remotes.clear(); this.renderPanel(); this.game.log('⛔ 서버 관리자가 접속을 끊었어요' + (m && m.msg ? ` — ${String(m.msg).slice(0, 80)}` : ''), '#ff9a8a'); alert('⛔ 서버 관리자가 접속을 끊었어요' + (m && m.msg ? `\n${String(m.msg).slice(0, 80)}` : '')); });                            // 파티 (party.js)
@@ -3984,6 +4003,7 @@ const party = {
           html += `<div class="ptMem"><span class="grow">${m.id === this.info.leader ? '👑 ' : ''}<b>${escapeHtml(m.name)}</b> <small>${r ? `Lv${r.lv} ${HEROES[r.cls] ? HEROES[r.cls].name : ''}` : me ? `Lv${g.player.level} ${g.player.cls.name}` : ''} · ${where}</small>
             <i class="ptHp"><i style="width:${hp}%"></i></i></span>
             ${!me && r && r.map === 'field' && online.mapId(g) === 'field' ? `<button data-tp="${m.id}" title="이 파티원 옆으로 이동">이동</button>` : ''}
+            ${!me && r ? `<button data-trade="${m.id}" title="거래 신청">거래</button>` : ''}
             ${!me && this.isLeader ? `<button data-kick="${m.id}">추방</button>` : ''}</div>`;
         }
         html += `<div class="ptRow"><input id="ptChat" maxlength="80" placeholder="파티 채팅 (Enter) · 채팅창에서 /p 할말"><button id="ptSend">보내기</button></div>
@@ -3992,7 +4012,7 @@ const party = {
       const others = [...online.remotes.entries()].filter(([id, r]) => r.name && !this.has(id));
       html += `<div class="ptSec">접속자 ${others.length}명</div>`;
       if (!others.length) html += '<p class="dimtxt">다른 접속자가 없어요</p>';
-      for (const [id, r] of others) html += `<div class="ptMem"><span class="grow"><b>${escapeHtml(r.name)}</b> <small>Lv${r.lv} ${HEROES[r.cls] ? HEROES[r.cls].name : ''} · ${r.mapName}</small></span>${!this.inParty || this.isLeader ? `<button class="gold" data-inv="${id}">초대</button>` : ''}</div>`;
+      for (const [id, r] of others) html += `<div class="ptMem"><span class="grow"><b>${escapeHtml(r.name)}</b> <small>Lv${r.lv} ${HEROES[r.cls] ? HEROES[r.cls].name : ''} · ${r.mapName}</small></span><button data-trade="${id}" title="거래 신청">거래</button>${!this.inParty || this.isLeader ? `<button class="gold" data-inv="${id}">초대</button>` : ''}</div>`;
       html += `<p class="dimtxt small">혜택: 근처 파티원 1명당 경험치 +10% · 파티원이 잡은 몬스터 경험치 50% 공유(가까이 있을 때) · 사제 치유/축복 · 기사 전투의 함성이 파티원에게도 적용</p>`;
     }
     box.innerHTML = html + '</div>';
@@ -4002,6 +4022,7 @@ const party = {
     box.querySelectorAll('[data-dec]').forEach((b) => { b.onclick = () => this.decline(b.dataset.dec); });
     box.querySelectorAll('[data-kick]').forEach((b) => { b.onclick = () => this.kick(b.dataset.kick); });
     box.querySelectorAll('[data-tp]').forEach((b) => { b.onclick = () => this.goTo(b.dataset.tp); });
+    box.querySelectorAll('[data-trade]').forEach((b) => { b.onclick = () => trade.request(b.dataset.trade); });
     const lv = box.querySelector('[data-leave]'); if (lv) lv.onclick = () => this.leave();
     const inp = $('ptChat');
     if (inp) {
@@ -4042,6 +4063,140 @@ const party = {
   },
   /** 파티 창이 열려 있으면 1초마다 갱신 (입력 중이면 건너뜀) */
   renderIfIdle() { const a = document.activeElement; if (a && a.id === 'ptChat') return; if ((this.panelT = (this.panelT || 0) + 1) % 2 === 0) this.render(); },
+};
+
+</script>
+<script>
+// =====================================================================
+//  trade.js — 유저 간 1:1 거래 (온라인 서버에서만)
+//
+//  신청: 파티 창(Y) 접속자 · 파티원 옆 [거래] → 상대가 [수락]
+//  거래 창
+//   · 아래 내 가방에서 아이템을 누르면 "내가 줄 것"에 올라감 (여러 개면 개수 입력) · 올린 것을 누르면 내림
+//   · 골드도 올릴 수 있음
+//   · 둘 다 [확정] → 둘 다 [교환] 을 누르면 성사 (확정한 뒤 누가 바꾸면 둘 다 다시 확정)
+//   · 착용 중인 장비는 못 올림 (가방에 있는 것만) · 받을 칸이 모자라면 발밑에 떨어짐
+//  서버: server.js 의 trade:* 이벤트
+// =====================================================================
+
+const trade = {
+  cur: null, reqs: [], mine: { items: [], gold: 0 },
+
+  init(game) { this.game = game; },
+  bind(room) {
+    room.on('trade', (t) => this.onState(t));
+    room.on('tradeReq', (m) => this.onReq(m));
+    room.on('tradeMsg', (t) => { if (typeof t === 'string') this.log(t.slice(0, 80), '#ffd8a0'); });
+    room.on('tradeDone', (d) => this.onDone(d));
+    room.on('offline', () => { this.cur = null; this.reqs = []; this.render(); this.renderReq(); });
+  },
+  get available() { return !!(online.room && online.room.partyEmit && online.status === 'online'); },
+  log(t, c = '#ffd8a0') { this.game.log('🤝 ' + t, c); },
+  emit(ev, d, cb) { if (!this.available) { this.log('거래는 온라인 서버에서만 할 수 있어요', '#a8b8c8'); return; } online.room.partyEmit(ev, d, cb); },
+  toast(r) { if (r && r.msg) this.log(r.msg, r.ok ? '#ffd8a0' : '#ff9a8a'); },
+
+  // ---------------------------------------------------------------- 신청
+  request(id) { if (this.cur) { this.log('이미 거래 중이에요'); return; } this.emit('trade:req', { to: id }, (r) => this.toast(r)); },
+  onReq(m) {
+    if (!m || typeof m.from !== 'string') return;
+    const name = String(m.name || '?').slice(0, 16);
+    this.reqs = this.reqs.filter((r) => r.from !== m.from).concat([{ from: m.from, name, t: Date.now() }]);
+    this.log(`${name}님이 거래를 신청했어요 (화면 위에서 수락)`); sfx.select(); this.renderReq();
+  },
+  accept(from) { this.reqs = this.reqs.filter((r) => r.from !== from); this.renderReq(); this.emit('trade:accept', { from }, (r) => { if (!r.ok) this.toast(r); }); },
+  decline(from) { this.reqs = this.reqs.filter((r) => r.from !== from); this.renderReq(); this.emit('trade:decline', { from }); },
+  renderReq() {
+    const el = $('tradeReq'); if (!el) return;
+    const r = this.reqs[this.reqs.length - 1];
+    if (!r || this.cur) { el.hidden = true; return; }
+    el.hidden = false;
+    el.innerHTML = `🤝 <b>${escapeHtml(r.name)}</b>님이 거래를 신청했어요 <button class="gold" id="trAcc">수락</button><button id="trDec">거절</button>`;
+    $('trAcc').onclick = () => this.accept(r.from); $('trDec').onclick = () => this.decline(r.from);
+  },
+
+  // ---------------------------------------------------------------- 거래 중
+  onState(t) {
+    const was = this.cur;
+    this.cur = t && t.me && t.them ? t : null;
+    if (!was && this.cur) { this.mine = { items: [], gold: 0 }; this.log(`${this.cur.them.name}님과 거래를 시작했어요`); sfx.select(); if (party.open) party.toggle(); this.reqs = []; this.renderReq(); }
+    if (this.cur) { this.mine = { items: (t.me.items || []).map((i) => ({ ...i })), gold: t.me.gold || 0 }; }
+    this.render();
+  },
+  /** 가방에 실제로 있는 개수 (올린 것 포함 확인용) */
+  have(id) { return this.game.player.inv.count(id); },
+  offered(id) { const it = this.mine.items.find((i) => i.id === id); return it ? it.qty : 0; },
+  sendOffer() { this.emit('trade:offer', { items: this.mine.items, gold: this.mine.gold }); },
+  add(id) {
+    if (!this.cur || this.cur.me.lock) return;
+    const left = this.have(id) - this.offered(id); if (left <= 0) return;
+    if (!this.mine.items.find((i) => i.id === id) && this.mine.items.length >= 12) { this.log('한 번에 12종류까지 올릴 수 있어요', '#ff9a8a'); return; }
+    let n = 1;
+    if (left > 1) { const a = prompt(`${ITEMS[id].name} 몇 개 올릴까요? (최대 ${left})`, String(left)); if (a === null) return; n = Math.max(0, Math.min(left, Math.floor(Number(a)) || 0)); if (!n) return; }
+    const it = this.mine.items.find((i) => i.id === id); if (it) it.qty += n; else this.mine.items.push({ id, qty: n });
+    sfx.select(); this.sendOffer();
+  },
+  take(id) { if (!this.cur || this.cur.me.lock) return; this.mine.items = this.mine.items.filter((i) => i.id !== id); sfx.select(); this.sendOffer(); },
+  setGold(v) {
+    if (!this.cur || this.cur.me.lock) return;
+    const g = Math.max(0, Math.min(this.game.player.inv.gold, Math.floor(Number(v)) || 0));
+    if (g !== this.mine.gold) { this.mine.gold = g; this.sendOffer(); } else this.render();
+  },
+  /** 올린 것을 아직 다 가지고 있나 */
+  stillHave() { const inv = this.game.player.inv; return this.mine.items.every((i) => inv.count(i.id) >= i.qty) && inv.gold >= this.mine.gold; },
+  lock() { if (!this.stillHave()) { this.log('올린 물건이나 골드가 모자라요 — 다시 올려 주세요', '#ff9a8a'); return; } this.emit('trade:lock', {}); },
+  confirm() {
+    if (!this.stillHave()) { this.emit('trade:cancel', { why: '물건이 모자람' }); return; }
+    this.emit('trade:confirm', {});
+  },
+  cancel() { this.emit('trade:cancel', {}); this.cur = null; this.render(); },
+  /** 성사: 줄 것 빼고 받을 것 넣기 */
+  onDone(d) {
+    const g = this.game, p = g.player; if (!d || !p) return;
+    const list = (o) => (o && Array.isArray(o.items) ? o.items.filter((i) => i && ITEMS[i.id] && Number.isInteger(i.qty) && i.qty > 0 && i.qty <= 9999) : []);
+    const num = (o) => (o && Number.isInteger(o.gold) && o.gold > 0 ? Math.min(o.gold, 1e9) : 0);
+    for (const i of list(d.give)) p.inv.remove(i.id, i.qty);
+    const gg = num(d.give); if (gg) p.inv.spendGold(Math.min(gg, p.inv.gold));
+    let dropped = 0;
+    for (const i of list(d.get)) { const left = p.inv.add(i.id, i.qty); if (left) { const l = new Loot('item', p.x, p.y + 4, i.id, left); l.t = 0.2; g.loot.push(l); dropped++; } }
+    const gt = num(d.get); if (gt) p.inv.addGold(gt);
+    const got = list(d.get).map((i) => `${ITEMS[i.id].name}${i.qty > 1 ? ' x' + i.qty : ''}`).concat(gt ? [`${gt}G`] : []);
+    this.log(`${String(d.with || '상대').slice(0, 16)}님과 거래 완료! 받은 것: ${got.join(', ') || '없음'}${dropped ? ' (가방이 가득 차서 일부는 발밑에)' : ''}`, '#9aff9a');
+    sfx.craft ? sfx.craft() : sfx.pickup();
+    this.cur = null; this.mine = { items: [], gold: 0 }; g.save(); this.render();
+  },
+
+  // ---------------------------------------------------------------- 화면
+  render() {
+    const box = $('trade'); if (!box) return;
+    if (!this.cur) { box.hidden = true; return; }
+    box.hidden = false;
+    const t = this.cur, me = t.me, th = t.them, inv = this.game.player.inv;
+    const itemRow = (items, mineSide) => (items || []).filter((i) => ITEMS[i.id]).map((i) => `<button class="trIt${mineSide ? '' : ' them'}" ${mineSide ? `data-take="${i.id}"` : ''} title="${escapeHtml(ITEMS[i.id].name)}"><canvas data-ic="${i.id}"></canvas><span style="color:${gradeColor(i.id)}">${escapeHtml(ITEMS[i.id].name)}</span>${i.qty > 1 ? `<b>x${i.qty}</b>` : ''}</button>`).join('') || '<p class="dimtxt">아직 없어요</p>';
+    const st = (s) => (s.ok ? '<span class="trOk">✅ 교환 누름</span>' : s.lock ? '<span class="trLock">🔒 확정</span>' : '<span class="dimtxt">고르는 중…</span>');
+    const both = me.lock && th.lock;
+    box.innerHTML = `<div class="trHead"><b>🤝 ${escapeHtml(th.name)}님과 거래</b><button data-cancel>거래 취소</button></div>
+      <div class="trCols">
+        <div class="trCol"><div class="trTitle">내가 줄 것 ${st(me)}</div><div class="trItems">${itemRow(this.mine.items, !me.lock)}</div>
+          <div class="trGold">💰 <input id="trGold" type="number" min="0" max="${inv.gold}" value="${this.mine.gold}" ${me.lock ? 'disabled' : ''}> G <small>(가진 골드 ${inv.gold})</small></div></div>
+        <div class="trCol"><div class="trTitle">${escapeHtml(th.name)}님이 줄 것 ${st(th)}</div><div class="trItems">${itemRow(th.items, false)}</div>
+          <div class="trGold">💰 <b>${(th.gold || 0).toLocaleString()} G</b></div></div>
+      </div>
+      <div class="trBtns">${!me.lock ? '<button class="gold" data-lock>확정</button>' : both ? (me.ok ? '<span class="dimtxt">상대가 [교환]을 누르길 기다리는 중…</span>' : '<button class="gold" data-ok>교환하기</button>') : '<span class="dimtxt">상대의 확정을 기다리는 중…</span>'}</div>
+      <div class="trTitle" style="margin-top:6px">내 가방 <small class="dimtxt">— 누르면 올라가요 · 착용 중인 장비는 올릴 수 없어요</small></div>
+      <div class="trBag">${inv.slots.map((s) => { if (!s || !ITEMS[s.id]) return ''; const left = inv.count(s.id) - this.offered(s.id); return `<button class="trB${left > 0 && !me.lock ? '' : ' used'}" data-add="${s.id}" title="${escapeHtml(ITEMS[s.id].name)}"><canvas data-ic="${s.id}"></canvas>${s.qty > 1 ? `<i>${s.qty}</i>` : ''}</button>`; }).join('')}</div>
+      <p class="dimtxt small">둘 다 [확정] → 둘 다 [교환하기]를 눌러야 거래돼요. 확정한 뒤 누가 내용을 바꾸면 다시 확정해야 해요.</p>`;
+    box.querySelectorAll('canvas[data-ic]').forEach((c) => { const ic = itemIconCanvas(c.dataset.ic, 26); c.replaceWith(ic); });
+    box.querySelector('[data-cancel]').onclick = () => this.cancel();
+    box.querySelectorAll('[data-take]').forEach((b) => { b.onclick = () => this.take(b.dataset.take); });
+    box.querySelectorAll('[data-add]').forEach((b) => { b.onclick = () => this.add(b.dataset.add); });
+    const lk = box.querySelector('[data-lock]'); if (lk) lk.onclick = () => this.lock();
+    const ok = box.querySelector('[data-ok]'); if (ok) ok.onclick = () => this.confirm();
+    const gi = $('trGold'); if (gi) { gi.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') gi.blur(); }); gi.onchange = () => this.setGold(gi.value); }
+  },
+  update() {
+    if ((this.t = (this.t || 0) + 1) % 30) return;
+    const before = this.reqs.length; this.reqs = this.reqs.filter((r) => Date.now() - r.t < 30000); if (before !== this.reqs.length) this.renderReq();
+  },
 };
 
 </script>
@@ -4253,7 +4408,7 @@ class Player {
     game.popText(this.x, this.y - 40, statText(stats), '#9ad8ff');
   }
   get maxHp() { return Math.round((60 + (this.pl - 1) * 12) * this.cls.hpMul) + this.stats.hp; }
-  get atk() { return (this.stats.atk + this.pl * 1.5) * this.cls.atkMul; }
+  get atk() { return (this.stats.atk + this.pl * 1.2) * this.cls.atkMul; }   // v41: 레벨 몫 1.5 → 1.2 (장비 차이가 더 잘 느껴지게)
   get def() { return this.stats.def + Math.floor(this.pl / 4); }
   get crit() { return 0.05 + this.stats.crit / 100; }
   get speed() { return this.cls.speed * Math.max(0.5, 1 + (this.stats.spd || 0) / 100) * (admin.flags.fast ? 2 : 1); }
@@ -4816,7 +4971,7 @@ class Monster {
     this.x = this.hx = x; this.y = this.hy = y; this.vx = 0; this.vy = 0;
     this.scale = d.scale || 1;
     const pl = this.pl = lvOld(level);                                  // 힘 계산용 레벨 (progression.js)
-    this.maxHp = this.hp = Math.round(d.hp * (1 + (pl - 1) * 0.32));
+    this.maxHp = this.hp = Math.round(d.hp * (1 + (pl - 1) * 0.32) * (1 + Math.max(0, pl - 10) * 0.04));   // v41: Lv30 이후 장비가 세진 만큼 체력 보정
     this.atk = d.atk * (1 + (pl - 1) * 0.22);
     this.bossKind = d.bossKind || (d.boss ? 'dungeon' : null); this.warns = [];
     this.speed = d.speed * (0.9 + Math.random() * 0.2);
@@ -6453,7 +6608,8 @@ STAT_NAME.mp = '최대 마나';
 
 // ---------------------------------------------------------------- 재질 단계
 const MAT_NAME = ['나무·돌', '청동', '철', '강철', '명품', '미스릴', '용린', '태초'];
-const TIER_ATK = [4, 6, 9, 13, 17, 22, 28, 35, 43];
+// v41 제작 장비 밸런스: 재질이 한 단계 오를 때마다 공격력 ×1.5 (예전 ×1.25~1.5) → 다음 재질 장비가 이전 재질 최고 장비보다 확실히 셈
+const TIER_ATK = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((t) => Math.round(5 * Math.pow(1.5, t) * 10) / 10);   // 5 · 7.5 · 11.3 · 16.9 · 25.3 · 38 · 57 · 85 · 128
 const TIER_TINT = [null, 'sepia(1) saturate(1.8) hue-rotate(-15deg)', 'grayscale(0.7) brightness(1.1)', 'grayscale(0.5) brightness(1.3) contrast(1.1)',
   'sepia(1) saturate(2.5) hue-rotate(5deg) brightness(1.15)', 'hue-rotate(160deg) saturate(1.3) brightness(1.2)', 'hue-rotate(-40deg) saturate(2) brightness(0.95)', 'sepia(1) saturate(3) hue-rotate(5deg) brightness(1.35)'];
 const tierStart = (t) => Math.max(1, t * 10);
@@ -6483,7 +6639,7 @@ const tierStation = (t, grade) => (t >= 5 || grade >= 3 ? { station: 'workbench'
     const T = OW_TIER[Math.min(4, t)], off = Math.max(0, Math.min(9, Math.round((g - T.g0) / Math.max(1, T.gs) * 6) + (v % 3)));
     const lv = tierStart(t) + (t === 0 ? off : off);
     d.lv = Math.max(1, Math.min(tierStart(t) + 9, lv));
-    d.atk = Math.max(1, Math.round((TIER_ATK[t] + (TIER_ATK[t + 1] - TIER_ATK[t]) * off / 10) * mulOf(d) * (1 + g * 0.12)));
+    d.atk = Math.max(1, Math.round(TIER_ATK[t] * (1 + off * 0.02) * mulOf(d) * (1 + g * 0.1)));   // 같은 재질 안: 레벨 +2%/Lv · 등급 +10%
     d.value = Math.round(Math.pow(d.atk, 1.55) * 4 * (1 + g * 0.6));
     d.desc = `${GRADES[g].name} · ${MAT_NAME[t]} 무기 · 착용 Lv${d.lv}`;
   };
@@ -6520,9 +6676,9 @@ const ARMOR_SLOTS = {
 };
 const ARMOR_IDS = [];
 function armorStats(slot, t, off, boost = 1) {
-  const S = ARMOR_SLOTS[slot], base = (ARMOR_DEF[t] + (ARMOR_DEF[t + 1] - ARMOR_DEF[t]) * off / 10) * boost, st = {};
+  const S = ARMOR_SLOTS[slot], base = ARMOR_DEF[t] * (1 + off * 0.01) * boost, st = {};   // v41: 다음 재질이 이전 재질 '견고한'보다 항상 높게
   if (S.def) st.def = Math.max(1, Math.round(base * S.def));
-  if (S.hp) st.hp = Math.round(base * S.hp * 5);
+  if (S.hp) st.hp = Math.round(base * S.hp * (5 + t) * (1 + off * 0.03));   // 높은 재질일수록 · 견고한일수록 체력 더
   if (S.spd) st.spd = Math.round(3 + t * 1.2 + off * 0.2);
   if (S.atk) st.atk = Math.max(1, Math.round((1 + base * 0.45) * boost));
   if (S.crit) st.crit = Math.round((2 + t + off * 0.2) * boost);
@@ -6530,8 +6686,8 @@ function armorStats(slot, t, off, boost = 1) {
 }
 (function buildArmor() {
   const recipes = [];
-  for (let t = 0; t <= TIER_MAX; t++) for (const [slot, S] of Object.entries(ARMOR_SLOTS)) for (const [vi, off, grade, pre] of [[0, 0, 0, ''], [1, 5, 1, '견고한 ']]) {
-    const id = `ar_${slot}_${t}_${vi}`, lv = tierStart(t) + off, stats = armorStats(slot, t, off, 1 + grade * 0.15);
+  for (let t = 0; t <= TIER_MAX; t++) for (const [slot, S] of Object.entries(ARMOR_SLOTS)) for (const [vi, off, grade, pre] of [[0, 0, 0, ''], [1, 5, 1, '견고한 ']]) {   // 견고한 = 방어 +15% · 체력 더
+    const id = `ar_${slot}_${t}_${vi}`, lv = tierStart(t) + off, stats = armorStats(slot, t, off, 1 + grade * 0.1);
     ITEMS[id] = {
       name: `${pre}${ARMOR_MAT[t]} ${S.n}`, type: slot, stats, color: ARMOR_COLOR[t], icon: S.icon, ...(S.tinted && TIER_TINT[t] ? { tint: TIER_TINT[t] } : {}),
       grade, lv, atier: t, value: Math.round((20 + lv * lv * 1.6) * (1 + grade * 0.5)), desc: `${GRADES[grade].name} · ${ARMOR_MAT[t]} ${S.n} · 착용 Lv${lv}`,
@@ -8012,7 +8168,7 @@ class Game {
     for (const n of this.world.npcs) this.world.solid[this.world.idx(Math.floor(n.x / T), Math.floor(n.y / T))] = 1;
     this.villagers = [new Villager((TOWN.cx - 4) * T, (TOWN.cy + 3) * T), new Villager((TOWN.cx + 5) * T, (TOWN.cy + 6) * T)];
     settings.load(); slots.load();
-    ui.init(this); title.init(); party.init(this); online.init(this);
+    ui.init(this); title.init(); party.init(this); trade.init(this); online.init(this);
     input.onTouchTap = (x, y) => this.touchTap(x, y);
     this.ready = true;
     title.show();
@@ -8425,7 +8581,7 @@ class Game {
   // ================================================================ 업데이트
   update(dt) {
     this.time += dt;
-    online.update(dt, this); party.update(dt);
+    online.update(dt, this); party.update(dt); trade.update();
     if (this.fade) {                                       // 맵 전환 페이드
       const f = this.fade; f.t += dt;
       if (!f.done && f.t >= f.dur) { f.done = true; f.mid(); this.zoneName = null; }
