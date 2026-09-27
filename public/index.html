@@ -507,8 +507,10 @@ for (const [k, m] of Object.entries(MONSTERS)) if (/^(skel|skeleton|frost)/.test
 
 const EQUIP_SLOTS = [
   ['weapon', '무기'], ['shield', '방패'], ['helmet', '투구'],
-  ['armor', '갑옷'], ['boots', '신발'], ['accessory', '장신구'],
+  ['armor', '갑옷'], ['gloves', '장갑'], ['boots', '신발'], ['accessory', '반지 1'], ['ring2', '반지 2'],
 ];
+/** 장비 칸 → 그 칸에 끼는 아이템 종류 (반지 2 = 장신구) */
+const slotType = (slot) => (slot === 'ring2' ? 'accessory' : slot);
 const STAT_NAME = { atk: '공격력', def: '방어력', hp: '최대 체력', spd: '이동 속도', crit: '치명타', aspd: '공격 속도', regen: '체력 재생' };
 const STAT_UNIT = { spd: '%', crit: '%', aspd: '%', regen: '/초' };
 
@@ -608,7 +610,7 @@ const BITS = {
   fishCooked: { pal: ['', '#2a1408', '#8a4a1a', '#c87a30', '#f0b060'], rows: ['..1111.....', '.123321.11', '12344321221', '12333321221', '.122221..11', '..1111.....'] },
 };
 
-const isEquip = (id) => ITEMS[id] && EQUIP_SLOTS.some(([s]) => s === ITEMS[id].type);
+const isEquip = (id) => ITEMS[id] && EQUIP_SLOTS.some(([s]) => s === ITEMS[id].type);   // 'gloves' 포함
 const isConsumable = (id) => ITEMS[id] && (ITEMS[id].type === 'potion' || ITEMS[id].type === 'food');
 const stackMax = (id) => ITEMS[id].stack || 1;
 const sellPrice = (id) => Math.max(1, Math.floor(ITEMS[id].value / 2));
@@ -676,7 +678,7 @@ const ENH_MAX = 10;
 function enhanceItem(t, k) {
   const m = /^(.+)\+(\d{1,2})$/.exec(k); if (!m) return undefined;
   const base = t[m[1]], n = +m[2];
-  if (!base || n < 1 || n > ENH_MAX || !['weapon', 'shield', 'helmet', 'armor', 'boots', 'accessory'].includes(base.type) || base.tlv || (base.tool && base.atk <= 3)) return undefined;
+  if (!base || n < 1 || n > ENH_MAX || !['weapon', 'shield', 'helmet', 'armor', 'gloves', 'boots', 'accessory'].includes(base.type) || base.tlv || (base.tool && base.atk <= 3)) return undefined;
   const d = { ...base, name: `+${n} ${base.name}`, en: n, enBase: m[1], value: Math.round(base.value * (1 + n * 0.3)) };
   if (base.type === 'weapon') d.atk = Math.round(base.atk * (1 + n * 0.08)) + n * 2;   // v42: 2배 단위
   if (base.stats) { d.stats = {}; for (const [s, v] of Object.entries(base.stats)) d.stats[s] = typeof v === 'number' ? Math.round((v * (1 + n * 0.1) + (s === 'def' || s === 'hp' ? n * (s === 'hp' ? 2 : 0.5) : 0)) * 10) / 10 : v; }
@@ -851,9 +853,9 @@ const BUILD_PARTS = {
   f_plant3:     { name: '큰 화분',     cat: '가구', kind: 'furn', prop: 'plant3',   cost: { herb: 3, stone: 2 } },
   f_rug:        { name: '러그',        cat: '가구', kind: 'furn', prop: 'rug',      cost: { leather: 2 }, flat: true },
   f_rug2:       { name: '무늬 러그',   cat: '가구', kind: 'furn', prop: 'rug2',     cost: { leather: 3 }, flat: true },
-  f_oven:       { name: '큰 화덕',     cat: '가구', kind: 'furn', prop: 'oven',     cost: { stone: 10, ore: 2 } },
+  f_oven:       { name: '큰 화덕 (용광로)', cat: '가구', kind: 'furn', prop: 'oven', cost: { stone: 10, ore: 2 }, use: 'furnace' },
   f_workbench:  { name: '작업대',      cat: '가구', kind: 'furn', prop: 'workbench', cost: { wood: 8, ore: 1 }, use: 'workbench' },
-  f_anvil:      { name: '모루',        cat: '가구', kind: 'furn', prop: 'anvil',    cost: { ore: 6, stone: 2 } },
+  f_anvil:      { name: '모루 (대장간)', cat: '가구', kind: 'furn', prop: 'anvil',  cost: { ore: 6, stone: 2 }, use: 'smithy' },
   // ---- 벽 장식 (실내 윗벽)
   f_window:     { name: '실내 창문',   cat: '벽 장식', kind: 'wallDecor', prop: 'window',  cost: { wood: 2, stone: 1 } },
   f_wolf:       { name: '늑대 박제',   cat: '벽 장식', kind: 'wallDecor', prop: 'wolf',    cost: { leather: 4, bone: 2 } },
@@ -1679,7 +1681,7 @@ class Inventory {
   addGold(n) { this.gold += n; this.onChange(); }
 
   sort() {
-    const order = { weapon: 0, shield: 1, helmet: 2, armor: 3, boots: 4, accessory: 5, potion: 6, food: 7, seed: 8, material: 9 };
+    const order = { weapon: 0, shield: 1, helmet: 2, armor: 3, gloves: 3.5, boots: 4, accessory: 5, potion: 6, food: 7, seed: 8, material: 9 };
     const merged = [];                                          // v49: 같은 아이템 묶음 합치기 (999개까지)
     for (const s of this.slots.filter(Boolean)) { const max = ITEMS[s.id].stack || 1; let q = s.qty; for (const m of merged) if (q > 0 && m.id === s.id && m.qty < max) { const n = Math.min(q, max - m.qty); m.qty += n; q -= n; } while (q > 0) { const n = Math.min(q, max); merged.push({ ...s, qty: n }); q -= n; } }
     const items = merged.sort((a, b) => order[ITEMS[a.id].type] - order[ITEMS[b.id].type] || ITEMS[b.id].value - ITEMS[a.id].value);
@@ -1702,7 +1704,11 @@ class Inventory {
  */
 class Equipment {
   constructor() { for (const [slot] of EQUIP_SLOTS) this[slot] = null; }
-  slotOf(id) { const t = ITEMS[id] && ITEMS[id].type; return EQUIP_SLOTS.some(([s]) => s === t) ? t : null; }
+  slotOf(id) {
+    const t = ITEMS[id] && ITEMS[id].type; if (!EQUIP_SLOTS.some(([s]) => s === t)) return null;
+    if (t === 'accessory' && this.accessory && !this.ring2) return 'ring2';        // 반지 1 이 차 있으면 반지 2 로
+    return t;
+  }
 
   /** 가방 i 번 칸의 장비를 착용 */
   equipFrom(inv, i) {
@@ -1733,7 +1739,7 @@ class Equipment {
     return t;
   }
   toJSON() { const o = {}; for (const [slot] of EQUIP_SLOTS) o[slot] = this[slot]; return o; }
-  load(o) { for (const [slot] of EQUIP_SLOTS) this[slot] = o && ITEMS[o[slot]] && ITEMS[o[slot]].type === slot ? o[slot] : null; }
+  load(o) { for (const [slot] of EQUIP_SLOTS) this[slot] = o && ITEMS[o[slot]] && ITEMS[o[slot]].type === slotType(slot) ? o[slot] : null; }
 }
 
 </script>
@@ -6716,6 +6722,12 @@ const STATION_TIERS = {
   ],
 };
 STATIONS.furnace = { name: '용광로', title: '용광로 · 제련', verb: '제련' };
+// v51: 모루(대장간) — 영지 · 집 안에 놓는 개인 대장간 · 1단계 나무~청동 · 2단계 철~강철 · 3단계 명품 이상 (마을 대장간은 전부)
+STATION_TIERS.smithy = [
+  { src: ST + 'Anvil/Anvil.png', rect: [6, 37, 53, 34] },
+  { src: ST + 'Anvil/Anvil.png', rect: [80, 36, 79, 56], glow: [22, 30] },
+  { src: ST + 'Anvil/Anvil.png', rect: [80, 36, 79, 56], glow: [22, 30] },
+];
 const TIER_NAME = ['', '기본', '개량', '마스터'];
 /** 단계별 재료: 1 = 처음 짓기, 2 · 3 = 업그레이드 (앞 단계 제작대 자체도 재료로 들어감) */
 const STATION_UPGRADE = [null, { wood: 10, stone: 5 }, { log: 20, iron_ingot: 5, leather: 5 }, { plank: 30, gold_ingot: 10, essence: 2 }];
@@ -6810,7 +6822,7 @@ for (const r of RECIPES) r.tier = r.station === 'smithy' ? 1 : RECIPE_TIER[r.res
 BAG_LEVELS[2].tier = 2; BAG_LEVELS[3].tier = 3;
 
 // ---- 건축 모드 [제작대] (영지에 1단계 짓기)
-for (const [type, name] of [['workbench', '작업대'], ['furnace', '용광로'], ['alchemy', '연금술 테이블'], ['cook', '요리 화로']]) {
+for (const [type, name] of [['workbench', '작업대'], ['furnace', '용광로'], ['alchemy', '연금술 테이블'], ['cook', '요리 화로'], ['smithy', '모루 (대장간)']]) {
   BUILD_PARTS['st_' + type] = { name: `${name} (1단계)`, cat: '제작대', kind: 'station', stype: type, cost: { ...STATION_UPGRADE[1] } };
 }
 if (!OUTDOOR_CATS.includes('제작대')) OUTDOOR_CATS.splice(1, 0, '제작대');
@@ -7220,6 +7232,7 @@ Object.assign(BITS, {
   dscale:  { pal: ['', '#3a0a08', '#a02a1a', '#e8583a', '#ffc080'], rows: ['...1....', '..121...', '.12321..', '1234321.', '.12321..', '..121...', '...1....'] },
   primal:  { pal: ['', '#4a3a10', '#c8a030', '#fff0a0', '#ffffff'], rows: ['...11...', '..1331..', '.134431.', '13444431', '.134431.', '..1331..', '...11...'] },
 });
+Object.assign(BITS, { glove: { pal: ['', '#2a1a10', '#8a5a32', '#b88050', '#e0b080'], rows: ['.1111...', '123331..', '1233331.', '12333311', '12333321', '.1222231', '..1111.1'] } });   // 장갑 (재질별 색은 tint)
 Object.assign(ITEMS, {
   mithril:      { name: '미스릴 주괴',  type: 'material', value: 180, stack: 999, icon: ['bits', 'mithril'], desc: 'Lv50 이상 몬스터 · 보스 드롭 · 미스릴 장비 재료' },
   dragon_scale: { name: '용린',         type: 'material', value: 320, stack: 999, icon: ['bits', 'dscale'],  desc: 'Lv58 이상 몬스터 · 보스 드롭 · 용린 장비 재료' },
@@ -7290,6 +7303,7 @@ const ARMOR_SLOTS = {
   helmet:    { n: '투구', def: 0.6, hp: 0.5, icon: ['doll', 'hat'] },
   armor:     { n: '갑옷', def: 1.0, hp: 1.0, icon: ['doll', 'torso'] },
   boots:     { n: '장화', def: 0.4, spd: 1,  icon: ['doll', 'feet'] },
+  gloves:    { n: '장갑', def: 0.3, aspd: 1, crit: 1, icon: ['bits', 'glove'], tinted: true },
   shield:    { n: '방패', def: 0.85, hp: 0.6, icon: ['wood', 128, 0, 16, 16], tinted: true },
   accessory: { n: '반지', atk: 1,  crit: 1,  icon: ['int', 580, 340, 7, 7], tinted: true },
 };
@@ -7300,7 +7314,8 @@ function armorStats(slot, t, off, boost = 1) {
   if (S.hp) st.hp = Math.round(base * S.hp * (5 + t) * (1 + off * 0.03));   // 높은 재질일수록 · 견고한일수록 체력 더
   if (S.spd) st.spd = Math.round(3 + t * 1.2 + off * 0.2);
   if (S.atk) st.atk = Math.max(1, Math.round((1 + base * 0.45) * boost));
-  if (S.crit) st.crit = Math.round((2 + t + off * 0.2) * boost);
+  if (S.crit) st.crit = Math.round((2 + t + off * 0.2) * boost * (S.aspd ? 0.5 : 1));
+  if (S.aspd) st.aspd = Math.round((3 + t * 1.5 + off * 0.2) * boost);   // 장갑: 공격 속도
   return st;
 }
 (function buildArmor() {
@@ -7373,7 +7388,8 @@ function setInfoHtml(key, n) {
 /** 착용 중인 세트 개수 */
 function setCounts(equip) {
   const c = {};
-  for (const [slot] of EQUIP_SLOTS) { const d = ITEMS[equip[slot]]; if (d && d.set) c[d.set] = (c[d.set] || 0) + 1; }
+  const seen = new Set();
+  for (const [slot] of EQUIP_SLOTS) { const id = equip[slot], d = ITEMS[id]; if (d && d.set && !seen.has(d.enBase || id)) { seen.add(d.enBase || id); c[d.set] = (c[d.set] || 0) + 1; } }   // 같은 세트 반지 2개 = 1개로
   return c;
 }
 
@@ -7945,7 +7961,7 @@ const admin = {
     const qty = Object.assign(document.createElement('input'), { type: 'number', value: this.itemN || 1, min: 1, max: 999, className: 'adNum' });
     r.append(q, cat, qty);
     const list = document.createElement('div'); list.className = 'adList'; body.append(list);
-    const kind = (d) => d.type === 'weapon' ? 'weapon' : isEquip && ['shield', 'helmet', 'armor', 'boots', 'accessory'].includes(d.type) ? 'armor' : ['food', 'potion'].includes(d.type) ? 'use' : d.type === 'material' ? 'material' : d.type === 'seed' ? 'seed' : 'etc';
+    const kind = (d) => d.type === 'weapon' ? 'weapon' : isEquip && ['shield', 'helmet', 'armor', 'gloves', 'boots', 'accessory'].includes(d.type) ? 'armor' : ['food', 'potion'].includes(d.type) ? 'use' : d.type === 'material' ? 'material' : d.type === 'seed' ? 'seed' : 'etc';
     const draw = () => {
       this.itemQ = q.value; this.itemCat = cat.value; this.itemN = +qty.value || 1;
       const s = q.value.trim().toLowerCase();
@@ -8212,7 +8228,7 @@ const ui = {
   /** 제작대 창: cook(요리 화로) · alchemy(연금술 테이블) · smithy(대장간) — 그 제작대의 레시피만 */
   openStation(kind, key) { this.station = kind; this.stationKey = key || null; this.crafting = new Crafting(RECIPES.filter((r) => (r.station || 'smithy') === kind)); this.open('craft'); },
   /** 지금 연 제작대의 단계 (영지 제작대 = 저장된 단계 · 마을/집 가구 = 1 · 대장간 = 3) */
-  get stationLevel() { return this.station === 'smithy' ? 3 : this.stationKey ? this.game.housing.stationLv.get(this.stationKey) || 1 : 1; },
+  get stationLevel() { return this.station === 'smithy' && !this.stationKey ? 3 : this.stationKey ? this.game.housing.stationLv.get(this.stationKey) || 1 : 1; },
   toast(r) { this.game.log(r.msg, r.ok ? '#9cff9c' : '#ff9a8a'); r.ok ? sfx.coin() : sfx.deny(); },
 
   render() {
@@ -8417,7 +8433,7 @@ const ui = {
   // ---------------------------------------------------------------- 제작
   renderCraft(body, p) {
     const lv = this.stationLevel;
-    if (this.station !== 'smithy') body.append(this.stationPanel(p, lv));
+    if (this.station !== 'smithy' || this.stationKey) body.append(this.stationPanel(p, lv));   // 마을 대장간만 단계 표시 없음
     if (this.station === 'workbench') { const h = document.createElement('div'); h.className = 'setSec'; h.textContent = '가방 제작 · 업그레이드'; body.append(h, this.bagPanel(p, lv)); const h2 = document.createElement('div'); h2.className = 'setSec'; h2.textContent = '🛠 생활 도구 업그레이드 (3단계 = 한 방에 · 3×3)'; body.append(h2, this.toolPanel(p, lv)); }
     const list = document.createElement('div'); list.className = 'list';
     // 레시피가 많으면 분류 탭 (대장간: 기본 · 나무·돌 · 청동 · 철 · 강철 무기 …)
@@ -8832,8 +8848,10 @@ const ZONE_NAME = {
 };
 
 // v49: 장비(무기 · 방어구 · 장신구)와 생활 도구를 뺀 모든 아이템(물약 · 음식 · 재료 · 씨앗 · 주문서 …) 999개까지 겹침
-const EQUIP_TYPES = ['weapon', 'shield', 'helmet', 'armor', 'boots', 'accessory'];
+const EQUIP_TYPES = ['weapon', 'shield', 'helmet', 'armor', 'gloves', 'boots', 'accessory'];
 for (const d of Object.values(ITEMS)) if (d && !EQUIP_TYPES.includes(d.type) && !d.tool) d.stack = 999;
+// v51: 대장간 레시피 단계 = 재질 (내 모루: 1단계 나무·돌 · 청동 / 2단계 철 · 강철 / 3단계 명품 이상 · 마을 대장간은 3단계라 전부)
+for (const r of RECIPES) if ((r.station || 'smithy') === 'smithy') { const d = ITEMS[r.result], t = d ? (d.ow ? d.ow.tier : d.atier !== undefined ? d.atier : 0) : 0; r.tier = t <= 1 ? 1 : t <= 3 ? 2 : 3; }
 
 class Game {
   constructor(canvas) {
