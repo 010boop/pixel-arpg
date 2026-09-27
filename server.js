@@ -113,6 +113,8 @@ let world = { tiles: {}, stations: {}, furn: [], rooms: {}, roof: 'wood', farm: 
 let dirty = false;
 let envRates = null; try { envRates = process.env.RATES ? cleanRates(JSON.parse(process.env.RATES)) : null; } catch (e) { /* 무시 */ }   // 예: RATES={"xp":2,"gold":2}
 try { world = { ...world, ...JSON.parse(fs.readFileSync(DATA, 'utf8')) }; console.log('공용 월드를 불러왔어요:', DATA); } catch (e) { console.log('새 공용 월드로 시작해요'); }
+/** 공용 월드가 비었나 (무료 Render 는 다시 배포할 때마다 파일이 지워짐 → 접속자 브라우저의 백업으로 되살림) */
+const worldEmpty = () => !Object.keys(world.tiles).length && !world.furn.length && !Object.keys(world.rooms || {}).some((k) => (world.rooms[k] || []).length) && !Object.keys(world.efarm).length;
 function saveWorld() {
   if (!dirty) return; dirty = false;
   try { fs.mkdirSync(path.dirname(DATA), { recursive: true }); fs.writeFileSync(DATA + '.tmp', JSON.stringify(world)); fs.renameSync(DATA + '.tmp', DATA); }
@@ -166,7 +168,8 @@ function applyOp(op) {
       return { op: 'remove', tx: op.tx, ty: op.ty };
     }
     case 'upgrade': {                                 // 제작대 단계
-      if (typeof op.key !== 'string' || !(op.key in world.stations) || !int(op.lv, 1, 3)) return null;
+      const inKey = typeof op.key === 'string' && /^r:\d{1,3},\d{1,3}(#[2-6])?\|\d{1,2},\d{1,2}$/.test(op.key);   // 집 안 제작대
+      if (typeof op.key !== 'string' || !(op.key in world.stations || inKey) || !int(op.lv, 1, 3)) return null;
       world.stations[op.key] = op.lv; return { op: 'upgrade', key: op.key, lv: op.lv };
     }
     case 'roof': { if (!idOk(op.style)) return null; world.roof = op.style; return { op: 'roof', style: op.style }; }
@@ -273,6 +276,26 @@ io.on('connection', (sock) => {
     if (!okWorld()) return;
     const clean = applyOp(op); if (!clean) return;
     dirty = true; sock.broadcast.emit('worldOp', { id, op: clean });
+  });
+  // ---- 백업으로 공용 월드 되살리기 (서버가 다시 켜져 비었을 때 · 같은 시즌의 백업만)
+  const okRestore = limiter(2);
+  sock.on('world:restore', (d, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    if (!okRestore() || !d || typeof d !== 'object' || !worldEmpty()) return reply({ ok: false });
+    const sv = seasonInfo(), bs = d.season || {};
+    if (String(bs.env || '') !== sv.env || (Number(bs.t) || 0) < sv.t) return reply({ ok: false, msg: '다른 시즌의 백업' });
+    const h = d.housing || {}, tiles = {}, stations = {}, rooms = {};
+    if (!Array.isArray(h.tiles) || h.tiles.length > 5000) return reply({ ok: false });
+    for (const t of h.tiles) if (Array.isArray(t) && int(t[0], 0, 400) && int(t[1], 0, 400) && idOk(t[2])) tiles[key(t[0], t[1])] = t[2];
+    for (const s of Array.isArray(h.stations) ? h.stations.slice(0, 2000) : []) if (Array.isArray(s) && typeof s[0] === 'string' && s[0].length < 40 && int(s[1], 1, 3)) stations[s[0]] = s[1];
+    const furnOk = (L) => (Array.isArray(L) ? L.slice(0, 600).filter((f) => Array.isArray(f) && idOk(f[0]) && int(f[1], 0, 60) && int(f[2], 0, 60)).map((f) => [f[0], f[1], f[2]]) : []);
+    for (const [r, L] of Object.entries(h.rooms && typeof h.rooms === 'object' ? h.rooms : {}).slice(0, 200)) if (roomOk(r)) rooms[r] = furnOk(L);
+    world.tiles = tiles; world.stations = stations; world.rooms = rooms; world.furn = furnOk(h.furn); if (idOk(h.roof)) world.roof = h.roof;
+    if (Array.isArray(d.farm) && d.farm.length <= 3000) world.farm = Object.fromEntries(d.farm.filter(plotOk).map(cleanPlot).map((p) => [key(p.tx, p.ty), p]));
+    if (Array.isArray(d.efarm) && d.efarm.length <= 6000) world.efarm = Object.fromEntries(d.efarm.filter(plotOk).map(cleanPlot).map((p) => [key(p.tx, p.ty), p]));
+    dirty = true; saveWorld();
+    log(`공용 월드를 백업으로 되살렸어요 (건물 ${Object.keys(tiles).length}칸 · by ${players.get(id) ? players.get(id).name : id})`);
+    io.emit('worldRestored', snapshot()); reply({ ok: true });
   });
   sock.on('sync', (d) => {                             // 호스트만: 밭 성장 · 시계를 모두에게 맞춤
     if (id !== hostId || !d || typeof d !== 'object') return;

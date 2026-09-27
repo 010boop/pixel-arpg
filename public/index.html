@@ -816,9 +816,9 @@ const BUILD_PARTS = {
   bp_villa:     { name: '회벽 저택 (7칸)',     cat: '설계도', kind: 'blueprint', w: 7, wall: 'wall_plaster', door: 'door_iron' },
   bp_manor:     { name: '벽돌 저택 (9칸)',     cat: '설계도', kind: 'blueprint', w: 9, wall: 'wall_brick',   door: 'door_arch' },
   bp_long:      { name: '검은 통나무 긴 집 (11칸)', cat: '설계도', kind: 'blueprint', w: 11, wall: 'wall_darklog', door: 'door_plank' },
-  bp_hall:      { name: '하얀 대저택 (12칸 · 3층)', cat: '설계도', kind: 'blueprint', w: 12, rows: 3, wall: 'wall_white', door: 'door_iron' },
-  bp_keep:      { name: '회색 석성 (15칸 · 4층)',   cat: '설계도', kind: 'blueprint', w: 15, rows: 4, wall: 'wall_gray',  door: 'door_arch' },
-  bp_temple:    { name: '이끼 신전 (13칸 · 3층)',   cat: '설계도', kind: 'blueprint', w: 13, rows: 3, wall: 'wall_moss',  door: 'door_arch' },
+  bp_hall:      { name: '하얀 대저택 (12칸 · 큰 집)', cat: '설계도', kind: 'blueprint', w: 12, rows: 3, wall: 'wall_white', door: 'door_iron' },
+  bp_keep:      { name: '회색 석성 (15칸 · 큰 집)',   cat: '설계도', kind: 'blueprint', w: 15, rows: 4, wall: 'wall_gray',  door: 'door_arch' },
+  bp_temple:    { name: '이끼 신전 (13칸 · 큰 집)',   cat: '설계도', kind: 'blueprint', w: 13, rows: 3, wall: 'wall_moss',  door: 'door_arch' },
   // ---- 조경 (영지 바깥): 울타리는 이웃과 자동 연결 · 길/화단은 밟고 지나갈 수 있음
   fence_wood:   { name: '나무 울타리', cat: '조경', kind: 'fence', style: 'wood',  cost: { wood: 1 } },
   fence_stone:  { name: '돌 울타리',   cat: '조경', kind: 'fence', style: 'stone', cost: { stone: 1 } },
@@ -879,6 +879,52 @@ const HOME_SIZE = { w: 12, h: 9 };                                  // 내 집 �
 
 /** 재료 목록 문자열: "목재 2 · 돌 1" */
 function costText(cost) { return Object.entries(cost).map(([id, n]) => `${ITEMS[id].name} ${n}`).join(' · '); }
+
+// =====================================================================
+//  큰 집 실내 (벽을 3줄 이상 쌓은 집 · 하얀 대저택 · 이끼 신전 · 회색 석성 …) — v45
+//   층을 오르내리는 대신 한 층에 방이 여러 개: 주방 · 식료품 창고 · 큰 식당 · 복도 · 욕실 · 침실 3개
+//   rooms: 바닥 [x, y, w, h, 바닥, 벽, 이름] (벽 그림은 방 위쪽 2줄) · carves: 방과 방을 잇는 통로 [x0, y0, x1, y1, 바닥]
+//   gifts: 처음 들어가면 놓여 있는 기본 가구 (치우면 재료는 안 나옴 · 원하는 가구로 바꿔 놓기)
+// =====================================================================
+const MANSION = {
+  w: 44, h: 42,
+  rooms: [
+    [1, 3, 13, 8, 'stone', 'stone', '주방'],
+    [16, 3, 27, 12, 'wood', 'plank', '식당'],
+    [1, 14, 13, 7, 'stone', 'stone', '식료품 창고'],
+    [1, 24, 42, 4, 'herring', 'log', '복도'],
+    [1, 31, 8, 9, 'stone', 'stone', '욕실'],
+    [10, 31, 10, 9, 'wood', 'plank', '침실 1'],
+    [24, 31, 9, 9, 'wood', 'plank', '침실 2'],
+    [34, 31, 9, 9, 'herring', 'plank', '침실 3'],
+  ],
+  carves: [
+    [14, 7, 15, 9, 'stone'],         // 주방 ↔ 식당
+    [6, 11, 7, 13, 'stone'],         // 주방 ↔ 식료품 창고
+    [6, 21, 7, 23, 'stone'],         // 식료품 창고 ↔ 복도
+    [20, 15, 22, 23, 'wood'],        // 식당 → 복도 (넓은 계단참)
+    [4, 28, 5, 30, 'stone'],         // 복도 ↔ 욕실
+    [14, 28, 15, 30, 'wood'],        // 복도 ↔ 침실 1
+    [27, 28, 28, 30, 'wood'],        // 복도 ↔ 침실 2
+    [37, 28, 38, 30, 'herring'],     // 복도 ↔ 침실 3
+    [21, 28, 22, 41, 'herring'],     // 복도 → 현관 (아래 문)
+  ],
+  gifts: [
+    ['stove', 3, 4], ['cabinet', 7, 4], ['oven', 11, 4], ['longtable', 7, 8],
+    ['cabinet', 4, 15], ['hutch', 10, 15], ['table', 7, 19],
+    ['hearth', 18, 4], ['desk', 24, 4], ['desk', 27, 4], ['hutch', 40, 4], ['longtable', 32, 8], ['longtable', 32, 11], ['table', 19, 9], ['table', 39, 9], ['table', 39, 12], ['rug2', 25, 10], ['plant3', 17, 13], ['plant3', 41, 13],
+    ['bench', 10, 25], ['bench', 32, 25], ['plant', 2, 25], ['plant', 42, 25], ['window', 6, 23], ['swordw', 13, 23], ['bear', 18, 23], ['wolf', 26, 23], ['shieldw', 30, 23], ['window', 38, 23],
+    ['desk', 5, 32], ['plant2', 2, 38],
+    ['bed2', 12, 32], ['wardrobe', 17, 32], ['rug', 14, 36], ['plant', 19, 38],
+    ['bed2', 26, 32], ['wardrobe', 31, 32], ['rug2', 28, 36],
+    ['bed', 36, 32], ['wardrobe', 40, 32], ['rug', 38, 36], ['plant2', 35, 38],
+    ['window', 12, 30], ['window', 26, 30], ['window', 39, 30], ['window', 30, 2], ['window', 36, 2], ['window', 22, 2],
+  ],
+};
+/** 큰 집 바닥 칸 ('x,y' 모음) */
+MANSION.floor = new Set();
+for (const [x, y, w, h] of MANSION.rooms) for (let ty = y; ty < y + h; ty++) for (let tx = x; tx < x + w; tx++) MANSION.floor.add(tx + ',' + ty);
+for (const [x0, y0, x1, y1] of MANSION.carves) for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) MANSION.floor.add(tx + ',' + ty);
 
 </script>
 <script>
@@ -1912,6 +1958,12 @@ const BUILDING_KINDS = new Set(['wall', 'window', 'door', 'roof']);
 const FLAT_KINDS = new Set(['floor', 'flowerbed']);
 const isSolidKind = (k) => !FLAT_KINDS.has(k);
 
+// 큰 집 기본 가구 = 재료가 안 나오는 복사본 'g_<prop>' (건축 막대에는 안 보임 · 치우면 그냥 사라짐)
+(function giftParts() {
+  const pick = (prop) => (prop === 'cabinet' ? BUILD_PARTS.f_storage_s : null) || Object.values(BUILD_PARTS).find((p) => p.prop === prop && (p.cat === '가구' || p.cat === '벽 장식' || p.cat === '제작대'));
+  for (const [prop] of MANSION.gifts) { const b = pick(prop); if (b && !BUILD_PARTS['g_' + prop]) BUILD_PARTS['g_' + prop] = { ...b, name: b.name + ' (기본)', cat: '기본 가구', cost: {}, gift: true }; }
+})();
+
 class Housing {
   constructor() { this.tiles = new Map(); this.auto = new Map(); this.rooms = new Map(); this.cur = ''; this.info = new Map(); this.done = new Set(); this.roofStyle = 'wood'; this.autoWindows = true; this.storages = new Map(); this.pending = null; this.stationLv = new Map(); this.occ = new Map(); }
   // ------------------------------------------------------------ 제작대 (단계 · 넓이)
@@ -1921,11 +1973,13 @@ class Housing {
   get furn() { return this.list(); }
   set furn(v) { this.rooms.set(this.cur, v); }
   /** 방 크기 (집이 클수록 넓음) */
-  roomSize(room = this.cur) { const i = this.info.get(this.baseRoom(room)); return i ? { w: i.w, h: i.h } : HOME_SIZE; }
+  roomSize(room = this.cur) { const i = this.info.get(this.baseRoom(room)); return i ? (i.big ? { w: MANSION.w, h: MANSION.h } : { w: i.w, h: i.h }) : HOME_SIZE; }
+  /** 큰 집(방 여러 개)인가 */
+  isBig(room = this.cur) { const i = this.info.get(this.baseRoom(room)); return !!(i && i.big) && this.floorOf(room) === 1; }
   /** 층: 방 key 'x,y' = 1층 · 'x,y#2' = 2층 … */
   baseRoom(room = this.cur) { return String(room || '').split('#')[0]; }
   floorOf(room = this.cur) { const m = /#(\d)$/.exec(room || ''); return m ? +m[1] : 1; }
-  floorsOf(room = this.cur) { const i = this.info.get(this.baseRoom(room)); return (i && i.floors) || 1; }
+  floorsOf() { return 1; }                                            // v45: 큰 집은 층 대신 방 여러 개 (MANSION)
   roomAt(floor, room = this.cur) { const b = this.baseRoom(room); return floor > 1 ? `${b}#${floor}` : b; }
   /** 계단 칸: 올라가는 계단 = 오른쪽 위 · 내려가는 계단 = 왼쪽 위 */
   stairs(room = this.cur) {
@@ -2047,7 +2101,7 @@ class Housing {
       }
       const style = Object.entries(styles).sort((a, b) => b[1] - a[1])[0];
       const fk = this.kindAt(tx, ty + 1), frontFree = !fk || FLAT_KINDS.has(fk);
-      out.push({ tx, ty, key: k, walls, roofs, bw: x1 - x0 + 1, bh: y1 - y0 + 1, floors: wallRows.size >= 3 ? Math.min(6, wallRows.size) : 1, complete: walls >= 2 && roofs >= 2 && frontFree, style: style ? style[0] : 'log', frontFree });
+      out.push({ tx, ty, key: k, walls, roofs, bw: x1 - x0 + 1, bh: y1 - y0 + 1, big: wallRows.size >= 3, complete: walls >= 2 && roofs >= 2 && frontFree, style: style ? style[0] : 'log', frontFree });
     }
     return out;
   }
@@ -2059,8 +2113,8 @@ class Housing {
       if (!h.complete) continue;
       const x = h.tx * T + 8, y = (h.ty + 1) * T;
       const size = { w: Math.max(12, Math.min(30, Math.round(h.bw * 2.2) + 2)), h: Math.max(9, Math.min(18, Math.round(h.bh * 1.8) + 3)) };   // 집이 클수록 넓은 실내
-      this.info.set(h.key, { ...size, style: h.style, floors: h.floors });
-      world.portals.push({ x, y: y + 6, ax: x, ay: y + 8, to: 'home', name: `내 집 (실내 ${size.w - 2}×${size.h - 4}${h.floors > 1 ? ` · ${h.floors}층` : ''})`, reach: 14, home: true, style: h.style, hkey: h.key });
+      this.info.set(h.key, { ...size, style: h.style, big: h.big });
+      world.portals.push({ x, y: y + 6, ax: x, ay: y + 8, to: 'home', name: h.big ? '내 큰 집 (주방 · 식당 · 침실 3 · 욕실)' : `내 집 (실내 ${size.w - 2}×${size.h - 4})`, reach: 14, home: true, style: h.style, hkey: h.key });
       now.add(this.key(h.tx, h.ty));
     }
     this.migrateLegacyRoom();
@@ -2113,13 +2167,21 @@ class Housing {
   }
   canPlaceIn(room, player, tx, ty, id) {
     const p = BUILD_PARTS[id], { w, h } = this.roomSize(), tiles = this.furnTiles(id, tx, ty);
-    if (p.kind === 'wallDecor') {
+    if (this.isBig()) {                                                     // 큰 집: 바닥 칸 모양대로
+      const fl = (x, y) => MANSION.floor.has(x + ',' + y);
+      if (p.kind === 'wallDecor') {
+        if (!tiles.every(([x, y]) => !fl(x, y) && fl(x, y + 1))) return '벽 장식은 방 윗벽에 걸어요';
+        if (this.furn.some((f) => BUILD_PARTS[f[0]].kind === 'wallDecor' && this.furnTiles(...f).some(([x, y]) => tiles.some(([xx, yy]) => xx === x && yy === y)))) return '이미 걸린 장식이 있어요';
+        return null;
+      }
+      if (!tiles.every(([x, y]) => fl(x, y))) return '방 바닥 위에만 놓을 수 있어요';
+    } else if (p.kind === 'wallDecor') {
       if (ty !== 2) return '벽 장식은 윗벽에 걸어요';
       if (tiles.some(([x]) => x < 1 || x > w - 2)) return '벽 밖이에요';
       if (this.furn.some((f) => BUILD_PARTS[f[0]].kind === 'wallDecor' && this.furnTiles(...f).some(([x]) => tiles.some(([xx]) => xx === x)))) return '이미 걸린 장식이 있어요';
       return null;
     }
-    if (ty < 3 || ty > h - 2 || tiles.some(([x]) => x < 1 || x > w - 2)) return '바닥 위에만 놓을 수 있어요';
+    if (!this.isBig() && (ty < 3 || ty > h - 2 || tiles.some(([x]) => x < 1 || x > w - 2))) return '바닥 위에만 놓을 수 있어요';
     if (this.stairs().some((s) => tiles.some(([x, y]) => Math.abs(x - s.tx) <= 1 && (y === s.ty || y === s.ty + 1)))) return '계단 자리예요';
     const same = (f) => (BUILD_PARTS[f[0]].flat || false) === (p.flat || false) && BUILD_PARTS[f[0]].kind === 'furn';
     if (this.furn.some((f) => same(f) && this.furnTiles(...f).some(([x, y]) => tiles.some(([xx, yy]) => xx === x && yy === y)))) return '다른 가구와 겹쳐요';
@@ -2135,21 +2197,31 @@ class Housing {
   removeIn(tx, ty, room = this.cur) {
     const f = this.furnAt(tx, ty, room); if (!f) return null;
     if (BUILD_PARTS[f[0]].use === 'storage') { const k = this.sk(f[1], f[2], room); if (!this.storageEmpty(k)) return { blocked: '창고를 먼저 비워 주세요' }; this.storages.delete(k); }
+    this.stationLv.delete(this.sk(f[1], f[2], room));
     const L = this.list(room); L.splice(L.indexOf(f), 1); return f[0];
   }
 
+  /** 큰 집에 처음 들어가면 기본 가구 (방이 비어 있을 때 한 번) */
+  furnishBig() {
+    const room = this.cur; if (!room || this.list(room).length || (this.gifted || (this.gifted = new Set())).has(room)) return;
+    this.gifted.add(room);
+    for (const [prop, tx, ty] of MANSION.gifts) { const id = 'g_' + prop; if (!BUILD_PARTS[id]) continue; this.placeIn(id, tx, ty, room); if (typeof online !== 'undefined') online.worldOp({ op: 'placeIn', id, tx, ty, room }); }
+  }
   /** "내 집" 실내 맵 만들기 (가구 목록 → Interior) */
   makeInterior(exitTo) {
-    const inf = this.info.get(this.baseRoom()), st = WALL_STYLE[(inf && inf.style) || this.homeStyle], { w, h } = this.roomSize(), fl = this.floorOf(), n = this.floorsOf();
+    const inf = this.info.get(this.baseRoom()), st = WALL_STYLE[(inf && inf.style) || this.homeStyle], { w, h } = this.roomSize(), big = this.isBig();
+    if (big) this.furnishBig();
     INTERIORS.home = {
-      name: (inf ? `내 집 (${w - 2}×${h - 4})` : '내 집') + (n > 1 ? ` · ${fl}층` : ''), w, h, floor: st.floor, wall: st.inWall,
-      noDoor: fl > 1, stairs: this.stairs(),
-      props: this.furn.map(([id, tx, ty]) => { const p = BUILD_PARTS[id]; return [p.prop, tx, ty, p.kind === 'furn' && !p.flat]; }),
+      name: big ? '내 큰 집' : inf ? `내 집 (${w - 2}×${h - 4})` : '내 집', w, h, floor: st.floor, wall: st.inWall,
+      layout: big ? MANSION : null,
+      props: this.furn.filter(([id, tx, ty]) => !big || BUILD_PARTS[id].kind === 'wallDecor' || this.furnTiles(id, tx, ty).every(([x, y]) => MANSION.floor.has(x + ',' + y))).map(([id, tx, ty]) => { const p = BUILD_PARTS[id]; return [p.prop, tx, ty, p.kind === 'furn' && !p.flat]; }),
       npcs: [],
       uses: this.furn.filter(([id]) => BUILD_PARTS[id].use).map(([id, tx, ty]) => {
         const u = BUILD_PARTS[id].use;
         if (u === 'storage') { const key = this.sk(tx, ty), st = this.storageFor(key, BUILD_PARTS[id].size); return { type: u, key, name: `${BUILD_PARTS[id].name} (${st.used}/${st.size}) · 열기`, tx, ty }; }
-        return { type: u, name: u === 'bed' ? '침대에서 휴식 · 저장' : `${BUILD_PARTS[id].name} · ${STATIONS[u].verb}`, tx, ty };
+        if (u === 'bed') return { type: u, name: '침대에서 휴식 · 저장', tx, ty };
+        const key = this.sk(tx, ty), lv = this.stationLv.get(key) || 1;             // 집 안 제작대도 3단계까지
+        return { type: u, key, name: `${BUILD_PARTS[id].name} ${lv}단계 · ${STATIONS[u].verb}`, tx, ty };
       }),
     };
     const room = new Interior('home', exitTo);
@@ -2160,12 +2232,12 @@ class Housing {
   // ------------------------------------------------------------ 저장
   toJSON() { return { tiles: [...this.tiles].map(([k, id]) => [...k.split(',').map(Number), id]), furn: (this.rooms.get('') || []).map((f) => [...f]), roof: this.roofStyle, estate: 1,
     rooms: Object.fromEntries([...this.rooms].filter(([k, L]) => k && L.length).map(([k, L]) => [k, L.map((f) => [...f])])),
-    storages: Object.fromEntries([...this.storages].map(([k, s]) => [k, s.slots])), stations: [...this.stationLv] }; }
+    storages: Object.fromEntries([...this.storages].map(([k, s]) => [k, s.slots])), stations: [...this.stationLv], gifted: [...(this.gifted || [])] }; }
   load(world, o) {
     for (const k of this.tiles.keys()) { const [x, y] = k.split(',').map(Number); world.solid[world.idx(x, y)] = 0; }   // 이전 캐릭터의 집 치우기
     for (const k of this.auto.keys()) { const [x, y] = k.split(',').map(Number); world.solid[world.idx(x, y)] = 0; }
     for (const k of this.occ.keys()) { const [x, y] = k.split(',').map(Number); world.solid[world.idx(x, y)] = 0; }
-    this.occ.clear(); this.stationLv.clear();
+    this.occ.clear(); this.stationLv.clear(); this.gifted = new Set(((o && o.gifted) || []).filter((k) => typeof k === 'string'));
     this.tiles.clear(); this.auto.clear(); this.rooms = new Map(); this.cur = ''; this.roofStyle = (o && o.roof) || 'wood';
     const old = o && o.tiles && o.tiles.length && !o.estate;             // 영지 이전 세이브: 필드 집 터(46~54, 64~69) → 영지 가운데로 옮김
     const dx = old ? Math.floor(ESTATE.w / 2) - 50 : 0, dy = old ? 40 - 67 : 0;
@@ -2177,7 +2249,7 @@ class Housing {
     for (const [room, L] of Object.entries((o && o.rooms) || {})) if (/^\d+,\d+(#\d)?$/.test(room) && Array.isArray(L)) this.rooms.set(room, L.filter((f) => BUILD_PARTS[f[0]]).map((f) => [...f]));
     // 제작대 단계 · 넓이
     for (const [k, id] of this.tiles) if (BUILD_PARTS[id].kind === 'station') this.stationLv.set('o:' + k, 1);
-    for (const [key, lv] of (o && o.stations) || []) if (this.stationLv.has(key)) this.stationLv.set(key, lv);
+    for (const [key, lv] of (o && o.stations) || []) if (this.stationLv.has(key) || (typeof key === 'string' && key[0] === 'r' && lv >= 2 && lv <= 3)) this.stationLv.set(key, lv);   // 집 안 제작대 단계도
     for (const key of this.stationLv.keys()) this.occupyStation(world, key);
     // 창고 내용물
     this.storages.clear(); this.pending = null;
@@ -3582,7 +3654,8 @@ const online = {
     this.room.onPeers((ch) => this.sync(ch.peers), dead);
     if (this.room.on) {                                                          // 서버 전용: 행동 · 공용 월드
       if (this.room.partyEmit) { party.bind(this.room); trade.bind(this.room); }
-      this.room.on('season', (sv) => this.checkSeason(sv));                      // 관리자 페이지: 시즌 초기화 (지금 접속 중인 사람도)
+      this.room.on('season', (sv) => this.checkSeason(sv));
+      this.room.on('worldRestored', (w) => { if (this.shared && w) { this.loadWorld(w); this.game.log('🏡 서버가 다시 켜져서, 저장해 둔 백업으로 공용 영지(집 · 가구 · 밭)를 되살렸어요', '#9aff9a'); } });                      // 관리자 페이지: 시즌 초기화 (지금 접속 중인 사람도)
       this.room.on('notice', (m) => this.notice(m && m.text));                   // 관리자 공지
       this.room.on('kicked', (m) => { this.kicked = true; this.status = 'offline'; this.remotes.clear(); this.renderPanel(); this.game.log('⛔ 서버 관리자가 접속을 끊었어요' + (m && m.msg ? ` — ${String(m.msg).slice(0, 80)}` : ''), '#ff9a8a'); alert('⛔ 서버 관리자가 접속을 끊었어요' + (m && m.msg ? `\n${String(m.msg).slice(0, 80)}` : '')); });                            // 파티 (party.js)
       this.room.on('welcome', (w) => { this.welcome = w; if (this.checkSeason(w.season)) return; applyServerRates(w.rates || null, false); if (this.game.playing) this.enterShared(w.world); });
@@ -3609,10 +3682,12 @@ const online = {
     let cur = null; if (raw !== null) { try { const o = JSON.parse(raw); cur = o && typeof o === 'object' ? { env: String(o.env || ''), t: Number(o.t) || 0 } : { env: String(o), t: 0 }; } catch (e) { cur = { env: raw, t: 0 }; } }
     const fresh = cur ? sv.env !== cur.env || sv.t > cur.t : !!(sv.env || sv.t);      // 새 시즌인가
     try { localStorage.setItem(KEY, JSON.stringify({ env: sv.env, t: Math.max(sv.t, cur ? cur.t : 0) })); } catch (e) { /* 저장 불가 */ }
+    if (fresh) { try { localStorage.removeItem('pf-world-backup'); } catch (e) { /* 없음 */ } }
     if (!fresh || !slots.list.some(Boolean)) return false;          // 새 시즌이 아니거나 지울 캐릭터가 없음
     const g = this.game; g.noSave = true;                           // 지우는 중에 다시 저장되지 않게
     slots.list = slots.list.map(() => null); slots.save();
     try { localStorage.removeItem('field-arpg-save-v1'); } catch (e) { /* 없음 */ }
+    try { localStorage.removeItem('pf-world-backup'); } catch (e) { /* 없음 */ }
     alert('🔄 새 시즌이 시작됐어요!\n서버 주인이 초기화해서 이 서버의 캐릭터가 모두 지워졌어요. 새 캐릭터로 시작해 주세요.');
     location.reload();
     return true;
@@ -3635,8 +3710,10 @@ const online = {
     if ((this.panelT = (this.panelT || 0) - dt) <= 0) { this.panelT = 1; this.renderPanel(); }
     if (!this.room || this.status !== 'online') return;
     if (this.server && game.playing && !this.shared && this.welcome) this.enterShared(this.welcome.world);   // 캐릭터를 고른 뒤 공용 월드로
+    if (this.shared && (this.backupT = (this.backupT || 0) - dt) <= 0) { this.backupT = 30; this.backupWorld(); }   // 모두: 30초마다 브라우저에 백업
     if (this.shared && this.room.isHost && (this.syncT -= dt) <= 0) {                                         // 호스트: 밭 · 시계 맞추기
-      this.syncT = 5; this.room.sync({ farm: game.farm.toJSON(), efarm: game.estateFarm.toJSON(), clock: game.clock.toJSON() });
+      this.syncT = 5;
+      this.room.sync({ farm: game.farm.toJSON(), efarm: game.estateFarm.toJSON(), clock: game.clock.toJSON() });
     }
     this.sendT -= dt; if (this.sendT > 0) return;
     this.sendT = 0.12;
@@ -3688,7 +3765,7 @@ const online = {
     const g = this.game; if (this.shared || !w || !g.playing) return;
     this.priv = { home: g.housing.toJSON(), efarm: g.estateFarm.toJSON(), farm: g.farm.toJSON(), clock: g.clock.toJSON() };
     this.shared = true;
-    this.loadWorld(w);
+    this.loadWorld(w); this.tryRestore(w);
     const net = (slots.list[g.slot] && slots.list[g.slot].save && slots.list[g.slot].save.net) || {};
     const h = g.housing;
     for (const [key, sl] of Object.entries(net.storages || {})) {           // 공용 상자 속 내 물건
@@ -3712,6 +3789,21 @@ const online = {
     g.housing.load(g.estate, this.priv.home); g.estateFarm.load(this.priv.efarm); g.farm.load(this.priv.farm); g.clock.load(this.priv.clock);
     this.priv = null; this.refreshRoom();
     g.log('🌐 연결이 끊겨 혼자 하기로 돌아왔어요 (내 영지로 돌아옴)', '#a8b8c8');
+  },
+  // ---------------------------------------------------------------- 공용 월드 백업 (브라우저)
+  //  무료 서버는 다시 배포(업데이트)할 때마다 저장 파일이 지워짐 → 접속자 브라우저에 30초마다 백업해 두고,
+  //  서버가 빈 채로 켜지면 처음 들어온 사람의 백업으로 되살림 (같은 시즌일 때만 · 시즌 초기화 뒤엔 안 됨)
+  backupWorld() {
+    const g = this.game; if (!this.shared || this.status !== 'online') return;
+    const h = g.housing.toJSON(); if (!h.tiles.length && !Object.keys(h.rooms || {}).length && !g.estateFarm.plots.size) return;
+    const sv = this.welcome && this.welcome.season;
+    try { localStorage.setItem('pf-world-backup', JSON.stringify({ season: sv && typeof sv === 'object' ? sv : { env: String(sv || ''), t: 0 }, savedAt: Date.now(), housing: { tiles: h.tiles, stations: h.stations, rooms: h.rooms, furn: h.furn, roof: h.roof }, farm: g.farm.toJSON(), efarm: g.estateFarm.toJSON() })); } catch (e) { /* 저장 불가 */ }
+  },
+  tryRestore(w) {
+    const hs = w && w.housing; if (!hs || (hs.tiles || []).length || Object.values(hs.rooms || {}).some((L) => L && L.length) || (w.efarm || []).length) return;   // 서버 월드가 비었을 때만
+    let b = null; try { b = JSON.parse(localStorage.getItem('pf-world-backup') || 'null'); } catch (e) { b = null; }
+    if (!b || !b.housing || !(b.housing.tiles || []).length) return;
+    this.room.partyEmit('world:restore', b, (r) => { if (r && r.ok) this.game.log('🏡 서버가 비어 있어서 내 백업으로 공용 영지를 되살렸어요', '#9aff9a'); });
   },
   loadWorld(w) {
     const g = this.game;
@@ -3743,6 +3835,7 @@ const online = {
       case 'tiles': for (const [x, y, id] of op.set || []) if (part(id)) { this.forceRemove(x, y); h.tiles.set(h.key(x, y), id); E.solid[E.idx(x, y)] = 1; } h.refresh(E); break;
       case 'remove': this.forceRemove(op.tx, op.ty); fx(op.tx, op.ty); break;
       case 'upgrade': {
+        if (typeof op.key === 'string' && op.key[0] === 'r') { h.stationLv.set(op.key, op.lv); break; }   // 집 안 제작대
         if (!h.stationLv.has(op.key)) return;
         h.freeStation(E, op.key.slice(2)); h.stationLv.set(op.key, op.lv); h.occupyStation(E, op.key); h.refresh(E); break;
       }
@@ -7136,6 +7229,8 @@ const MOVE_ATK = { sword: 1, dagger: 0.8, spear: 0.95, heavy: 1.25, bow: 1, xbow
   // 예전 무기(나무 검 · 뼈 도끼 …)도 공격력에 맞는 착용 레벨
   const lvForAtk = (a) => { for (let lv = 1; lv <= 90; lv++) if (atkAtLv(lv) >= a) return lv; return 90; };
   for (const [id, d] of Object.entries(ITEMS)) if (d.type === 'weapon' && !d.ow && !(d.tool && d.atk <= 3)) { d.atk *= 2; if (!d.lv) d.lv = lvForAtk(d.atk * 0.9); }   // v42: 공격력 2배 단위
+  // v45: 전투 무기(철 도끼 · 뼈 도끼 …)는 채집 불가 — 나무 · 돌 · 풀은 채집 도구(나무꾼 도끼 · 곡괭이 · 낫 …)로만
+  for (const d of Object.values(ITEMS)) if (d.type === 'weapon' && d.tool && !d.tlv && !d.tbase && (d.ow || d.atk > 3)) { delete d.tool; d.desc = (d.desc ? d.desc + ' · ' : '') + '전투 무기 (채집 불가)'; }
 })();
 
 // ---------------------------------------------------------------- 방어구: 재질 × 부위 × 2종
@@ -7418,7 +7513,8 @@ class Interior extends TileMap {
     super(d.w, d.h);
     this.id = id; this.def = d; this.name = d.name; this.exitTo = exitTo; this.isInterior = true;   // exitTo = 필드로 돌아갈 위치 {x, y}
     // 벽: 위 3줄, 양옆 1줄, 아래 1줄 (가운데 문 2칸은 뚫림)
-    for (let ty = 0; ty < d.h; ty++) for (let tx = 0; tx < d.w; tx++) {
+    if (d.layout) { for (let i = 0; i < this.solid.length; i++) this.solid[i] = 1; for (const k of d.layout.floor) { const [x, y] = k.split(',').map(Number); this.solid[this.idx(x, y)] = 0; } }   // 큰 집: 방 모양대로
+    else for (let ty = 0; ty < d.h; ty++) for (let tx = 0; tx < d.w; tx++) {
       const door = !d.noDoor && ty === d.h - 1 && (tx === (d.w >> 1) - 1 || tx === d.w >> 1);
       if (ty < 3 || tx === 0 || tx === d.w - 1 || (ty === d.h - 1 && !door)) this.solid[this.idx(tx, ty)] = 1;
     }
@@ -7454,17 +7550,42 @@ class Interior extends TileMap {
   waterSpot() { return null; }
   isWaterAt() { return false; }
 
+  /** 큰 집: 방마다 바닥 · 윗벽 · 통로 · 방 이름 */
+  paintLayout(g, c) {
+    const d = this.def, L = d.layout, wall = assets.get(SHEETS.walls);
+    g.fillStyle = '#0c0a08'; g.fillRect(0, 0, c.width, c.height);
+    const floorAt = (x, y, style) => { const F = IN_FLOOR[style] || IN_FLOOR.wood, [sx, sy] = F[(x * 7 + y * 3) % F.length]; if (wall) g.drawImage(wall, sx, sy, 16, 16, x * T, y * T, 16, 16); };
+    for (const [x, y, w, h, fl] of L.rooms) for (let ty = y; ty < y + h; ty++) for (let tx = x; tx < x + w; tx++) floorAt(tx, ty, fl);
+    for (const [x, y, w, , , wl] of L.rooms) {                              // 윗벽 (방 위 2줄 · 그림은 아래쪽만 잘라서)
+      const [wx, wy, ww, wh] = IN_WALL[wl] || IN_WALL.plank, sh = Math.min(wh, 2 * T);
+      for (let tx = x; tx < x + w; tx++) if (wall) g.drawImage(wall, wx, wy + wh - sh, ww, sh, tx * T, y * T - sh, ww, sh);
+      g.fillStyle = '#5a3a1c'; g.fillRect(x * T, y * T - sh - 2, w * T, 2);
+      const sd = g.createLinearGradient(0, y * T, 0, y * T + 8); sd.addColorStop(0, 'rgba(0,0,0,.4)'); sd.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = sd; g.fillRect(x * T, y * T, w * T, 8);
+    }
+    for (const [x0, y0, x1, y1, fl] of L.carves) for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) floorAt(tx, ty, fl);
+    for (const [x0, y0, x1, y1] of L.carves) if (y1 - y0 >= 2) {             // 긴 통로 = 나무 계단 줄무늬
+      for (let ty = y0; ty <= y1; ty++) { g.fillStyle = 'rgba(40,24,10,.35)'; g.fillRect(x0 * T, ty * T + 14, (x1 - x0 + 1) * T, 2); }
+      g.fillStyle = '#3a2410'; g.fillRect(x0 * T - 2, y0 * T, 2, (y1 - y0 + 1) * T); g.fillRect((x1 + 1) * T, y0 * T, 2, (y1 - y0 + 1) * T);
+    }
+    for (const [x, y, w, h] of L.rooms) { g.strokeStyle = '#2a1a0c'; g.lineWidth = 2; g.strokeRect(x * T - 1, y * T - 2 * T - 1, w * T + 2, (h + 2) * T + 2); }
+    g.font = 'bold 7px sans-serif'; g.textAlign = 'left';
+    for (const [x, y, , , , , name] of L.rooms) { g.fillStyle = 'rgba(0,0,0,.45)'; g.fillText(name, x * T + 3, y * T + 9); g.fillStyle = 'rgba(255,232,176,.8)'; g.fillText(name, x * T + 2, y * T + 8); }
+    // 현관 매트
+    const doorL = ((d.w >> 1) - 1) * T; g.fillStyle = '#7a2a1a'; g.fillRect(doorL + 3, c.height - T - 2, 2 * T - 6, 8); g.fillStyle = '#c8a050'; g.fillRect(doorL + 5, c.height - T, 2 * T - 10, 1);
+  }
   paint() {
     const d = this.def, c = document.createElement('canvas'); c.width = d.w * T; c.height = d.h * T;
     const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
     const wall = assets.get(SHEETS.walls);
     g.fillStyle = '#0c0a08'; g.fillRect(0, 0, c.width, c.height);
-    if (wall) {
+    if (d.layout) this.paintLayout(g, c);
+    else if (wall) {
       const F = IN_FLOOR[d.floor];
       for (let ty = 3; ty < d.h; ty++) for (let tx = 1; tx < d.w - 1; tx++) { const [sx, sy] = F[(tx * 7 + ty * 3) % F.length]; g.drawImage(wall, sx, sy, 16, 16, tx * T, ty * T, 16, 16); }
       const [wx, wy, ww, wh] = IN_WALL[d.wall];
       for (let tx = 1; tx < d.w - 1; tx++) g.drawImage(wall, wx, wy, ww, wh, tx * T, 3 * T - wh, ww, wh);
     }
+    if (!d.layout) {
     // 벽 그림자 · 테두리
     const sh = g.createLinearGradient(0, 3 * T, 0, 3 * T + 10); sh.addColorStop(0, 'rgba(0,0,0,.45)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = sh; g.fillRect(T, 3 * T, c.width - 2 * T, 10);
@@ -7475,6 +7596,7 @@ class Interior extends TileMap {
     g.fillStyle = '#6a4a2a'; g.fillRect(T - 2, 3 * T - 4, 2, c.height); g.fillRect(c.width - T, 3 * T - 4, 2, c.height);
     // 출입구 매트
     if (!d.noDoor) { g.fillStyle = '#7a2a1a'; g.fillRect(doorL + 3, c.height - T - 2, 2 * T - 6, 8); g.fillStyle = '#c8a050'; g.fillRect(doorL + 5, c.height - T, 2 * T - 10, 1); }
+    }
     for (const s of d.stairs || []) this.drawStairs(g, s);
     // 바닥에 까는 소품 (러그 등)
     const pr = assets.get(SHEETS.int);
@@ -8154,18 +8276,26 @@ const ui = {
     const stars = '★'.repeat(lv) + '☆'.repeat(3 - lv);
     let html = `<div class="bagHead"><b>🛠 ${S.name} ${lv}단계 · ${TIER_NAME[lv]}</b> <span class="stars">${stars}</span></div>`;
     const unlockNext = (t) => { const n = this.crafting.recipes.filter((r) => r.tier === t).length; return `${t}단계 레시피 ${n}개 해금`; };
-    if (!key) html += `<div class="bagNext"><small>${this.station === 'smithy' ? '' : '마을 공용 · 집 안 제작대는 1단계 고정이에요. 내 영지에 직접 지으면 3단계까지 업그레이드할 수 있어요 (건축 모드 → 제작대).'}</small></div>`;
+    if (!key) html += `<div class="bagNext"><small>${this.station === 'smithy' ? '' : '마을 공용 제작대는 1단계 고정이에요. 내 영지나 내 집 안에 직접 놓으면 3단계까지 업그레이드할 수 있어요.'}</small></div>`;
     else if (lv < 3) {
       const need = STATION_UPGRADE[lv + 1], inv = p.inv;
       const mats = Object.entries(need).map(([m, n]) => `<span class="mat ${inv.count(m) >= n ? 'ok' : 'no'}">${ITEMS[m].name} ${inv.count(m)}/${n}</span>`).join(' ');
-      html += `<div class="bagNext"><div><b>다음: ${lv + 1}단계 ${TIER_NAME[lv + 1]}</b> <small>(${unlockNext(lv + 1)} · 그림이 더 크고 멋지게 · 옆 칸이 비어 있어야 해요)</small><br>${mats}</div></div>`;
+      html += `<div class="bagNext"><div><b>다음: ${lv + 1}단계 ${TIER_NAME[lv + 1]}</b> <small>(${unlockNext(lv + 1)}${key[0] === 'r' ? '' : ' · 그림이 더 크고 멋지게 · 옆 칸이 비어 있어야 해요'})</small><br>${mats}</div></div>`;
     } else html += '<div class="bagNext"><small>최고 단계예요! 모든 레시피를 만들 수 있어요.</small></div>';
     box.innerHTML = html;
     if (key && lv < 3) {
       const need = STATION_UPGRADE[lv + 1], can = p.inv.hasAll(need);
       const b = document.createElement('button'); b.className = 'gold'; b.textContent = '⬆ 업그레이드'; b.disabled = !can;
       b.onclick = () => {
-        const h = this.game.housing, world = this.game.estate;
+        const h = this.game.housing, world = this.game.estate, inside = key[0] === 'r';
+        if (inside) {                                                            // 집 안 제작대: 자리는 그대로 · 단계만
+          for (const [m, n] of Object.entries(need)) p.inv.remove(m, n);
+          h.stationLv.set(key, lv + 1); online.worldOp({ op: 'upgrade', key, lv: lv + 1 });
+          if (this.game.indoor) builder.rebuildRoom(this.game);
+          this.game.burst(this.game.player.x, this.game.player.y - 20, '#ffd86a', 26);
+          this.toast({ ok: true, msg: `${josa(S.name, '이', '가')} ${lv + 1}단계 ${josa(TIER_NAME[lv + 1], '으로', '로')} 업그레이드됐어요! 새 레시피가 열렸어요` }); sfx.craft();
+          this.game.save(); this.render(); return;
+        }
         if (!h.stationRoom(world, key, lv + 1)) { this.toast({ ok: false, msg: `${lv + 1}단계는 더 넓어요 — 제작대 옆 칸을 비워 주세요` }); return; }
         for (const [m, n] of Object.entries(need)) p.inv.remove(m, n);
         h.upgradeStation(world, key); online.worldOp({ op: 'upgrade', key, lv: lv + 1 });

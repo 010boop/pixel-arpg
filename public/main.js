@@ -48,7 +48,7 @@
       sock.on('worldSync', (m) => this.fire('worldSync', m));
       sock.on('host', (h) => { this.hostId = h; this.fire('host', h); });
       sock.on('rates', (r) => this.fire('rates', r));
-      for (const ev of ['party', 'partyInvite', 'partyMsg', 'partyAct', 'season', 'notice', 'trade', 'tradeReq', 'tradeMsg', 'tradeDone']) sock.on(ev, (m) => this.fire(ev, m));   // 파티 · 시즌 · 공지
+      for (const ev of ['party', 'partyInvite', 'partyMsg', 'partyAct', 'season', 'notice', 'trade', 'tradeReq', 'tradeMsg', 'tradeDone', 'worldRestored']) sock.on(ev, (m) => this.fire(ev, m));   // 파티 · 시즌 · 공지
       sock.on('kicked', (m) => { sock.io.opts.reconnection = false; this.fire('kicked', m); });       // 관리자가 내보냄 → 다시 연결 안 함                  // 서버 배율 (관리자가 바꾸면 모두에게)
     }
     get isHost() { return this.ok && this.id && this.id === this.hostId; }
