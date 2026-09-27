@@ -37,7 +37,7 @@ const MAX_PLAYERS = Number(process.env.MAX_PLAYERS) || 60;
 const DATA = process.env.DATA_FILE || path.join(__dirname, 'data', 'world.json');
 const SEASON = String(process.env.SEASON || '').slice(0, 20);          // ◀ 시즌 번호 — Render 환경 변수 SEASON 을 바꾸면(1 → 2 …) 접속하는 모든 사람의 캐릭터가 초기화됨
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '1234';           // ◀ 서버 배율을 바꿀 때 쓰는 관리자 비밀번호 (Render 환경 변수 ADMIN_PASSWORD 로 바꾸세요)
-const RATE_KEYS = ['xp', 'gold', 'drop', 'gather', 'enh', 'elite', 'respawn'];
+const RATE_KEYS = ['xp', 'gold', 'drop', 'gather', 'enh', 'elite', 'respawn', 'pdmg', 'mhp', 'matk', 'd_knight', 'd_rogue', 'd_wizard', 'd_thief', 'd_priest'];   // pdmg 플레이어 공격력 · mhp 몬스터 체력 · matk 몬스터 공격력
 /** 서버 배율 검사: 알려진 키 · 0.1 ~ 100 */
 /** 시즌 = 환경 변수 SEASON + 관리자 페이지에서 초기화한 시각(t) — 둘 중 하나라도 새로우면 접속자의 캐릭터가 지워짐 */
 function seasonInfo() { return { env: SEASON, t: Number(world.seasonT) || 0 }; }

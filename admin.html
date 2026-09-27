@@ -30,7 +30,7 @@
   .hp { width: 70px; height: 6px; background: #3a1010; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; }
   .hp i { display: block; height: 100%; background: var(--ok); }
   .rate { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 6px 0; }
-  .rate label { width: 92px; }
+  .rate label { width: 122px; }
   .rate input { width: 64px; }
   .rate button { padding: 4px 8px; }
   .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
@@ -84,7 +84,7 @@
       <button data-ev="1">모두 기본(x1)</button><button data-ev="2">이벤트 x2</button><button data-ev="3">이벤트 x3</button>
       <button class="gold" id="saveRates">배율 저장</button>
     </div>
-    <p class="dim">이벤트 버튼 = 경험치 · 골드 · 드롭 · 채집을 한꺼번에 · [배율 저장]을 눌러야 적용돼요</p>
+    <p class="dim">이벤트 버튼 = 경험치 · 골드 · 드롭 · 채집을 한꺼번에 · [배율 저장]을 눌러야 적용돼요<br>⚔ 플레이어 공격력 = 모든 캐릭터가 주는 피해 (0.8 = 20% 약하게) · 👹 몬스터 체력 · 공격력은 새로 나오는 몬스터부터 적용</p>
   </section>
 
   <section class="wide">
@@ -97,7 +97,7 @@
 <div id="msg"></div>
 
 <script>
-const RATE_DEF = [['xp', '경험치'], ['gold', '골드'], ['drop', '아이템 드롭'], ['gather', '채집 · 수확'], ['enh', '강화 성공'], ['elite', '정예 등장'], ['respawn', '몬스터 재생성']];
+const RATE_DEF = [['xp', '경험치'], ['gold', '골드'], ['drop', '아이템 드롭'], ['gather', '채집 · 수확'], ['enh', '강화 성공'], ['elite', '정예 등장'], ['respawn', '몬스터 재생성'], ['pdmg', '⚔ 플레이어 공격력'], ['mhp', '👹 몬스터 체력'], ['matk', '👹 몬스터 공격력'], ['d_knight', '🛡 기사 공격력'], ['d_rogue', '🏹 궁수 공격력'], ['d_wizard', '🔮 마법사 공격력'], ['d_thief', '🗡 도적 공격력'], ['d_priest', '✚ 사제 공격력']];
 const CLS = { knight: '기사', rogue: '궁수', wizard: '마법사', thief: '도적', priest: '사제' };
 let pass = sessionStorage.getItem('pf-admin') || '', state = null, rates = {}, timer = null;
 const $ = (id) => document.getElementById(id);
@@ -134,7 +134,7 @@ async function refresh(first) {
   if (first || !document.activeElement || !document.activeElement.closest('#rates')) { rates = { ...s.rates }; drawRates(); }
 }
 function drawRates() {
-  $('rates').innerHTML = RATE_DEF.map(([k, n]) => `<div class="rate"><label>${n}</label>${[0.5, 1, 2, 3, 5].map((v) => `<button data-k="${k}" data-v="${v}" class="${rates[k] === v ? 'on' : ''}">x${v}</button>`).join('')}<input type="number" min="0.1" max="100" step="0.1" data-in="${k}" value="${rates[k]}"></div>`).join('');
+  $('rates').innerHTML = RATE_DEF.map(([k, n]) => `<div class="rate"><label>${n}</label>${(['pdmg', 'mhp', 'matk'].includes(k) || k.startsWith('d_') ? [0.5, 0.7, 0.8, 0.9, 1, 1.2, 1.5, 2] : [0.5, 1, 2, 3, 5]).map((v) => `<button data-k="${k}" data-v="${v}" class="${rates[k] === v ? 'on' : ''}">x${v}</button>`).join('')}<input type="number" min="0.1" max="100" step="0.1" data-in="${k}" value="${rates[k]}"></div>`).join('');
   document.querySelectorAll('#rates [data-k]').forEach((b) => { b.onclick = () => { rates[b.dataset.k] = +b.dataset.v; drawRates(); }; });
   document.querySelectorAll('#rates [data-in]').forEach((i) => { i.oninput = () => { rates[i.dataset.in] = Math.max(0.1, Math.min(100, +i.value || 1)); }; });
 }

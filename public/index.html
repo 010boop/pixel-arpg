@@ -4901,6 +4901,7 @@ const FOUR = (ax, ay) => (Math.abs(ax) >= Math.abs(ay) * 0.9 ? (ax >= 0 ? 'right
 const QUICK_N = 12;                                  // 퀵슬롯 칸 수 (숫자 키 1~9 · 0 · - · =)
 const QUICK_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];
 
+const PLAYER_DMG = 0.85;            // v46: 모든 캐릭터 피해 조금 낮춤 (서버 관리자 페이지의 '플레이어 공격력' 배율로 더 조절)
 class Player {
   constructor(clsId, name, x, y, hair) {
     this.clsId = clsId; this.cls = HEROES[clsId]; this.name = name; this.hair = hair || HAIR_COLORS[0];
@@ -5171,7 +5172,7 @@ class Player {
   }
   rollDmg(mult) {
     const crit = Math.random() < this.crit;
-    return { dmg: Math.max(1, Math.round(this.atk * mult * (0.88 + Math.random() * 0.24) * (crit ? 1.8 : 1))), crit };
+    return { dmg: Math.max(1, Math.round(this.atk * mult * PLAYER_DMG * RATES.pdmg * (RATES['d_' + this.clsId] || 1) * (0.88 + Math.random() * 0.24) * (crit ? 1.8 : 1))), crit };   // v46: 기본 피해 ×0.85 · 서버 배율 pdmg
   }
   /** 타격 순간: 동작 모양에 따라 판정 */
   strike(game, m) {
@@ -5520,8 +5521,8 @@ class Monster {
     this.x = this.hx = x; this.y = this.hy = y; this.vx = 0; this.vy = 0;
     this.scale = d.scale || 1;
     const pl = this.pl = lvOld(level);                                  // 힘 계산용 레벨 (progression.js)
-    this.maxHp = this.hp = Math.round(d.hp * 2 * (1 + (pl - 1) * 0.32) * (1 + Math.max(0, pl - 10) * 0.04));   // v42: 공격력 2배 단위라 체력도 2배 · Lv30 이후 보정
-    this.atk = d.atk * (1 + (pl - 1) * 0.22);
+    this.maxHp = this.hp = Math.round(d.hp * 2 * (1 + (pl - 1) * 0.32) * (1 + Math.max(0, pl - 10) * 0.04) * RATES.mhp);   // v42: 공격력 2배 단위라 체력도 2배 · Lv30 이후 보정
+    this.atk = d.atk * (1 + (pl - 1) * 0.22) * RATES.matk;
     this.bossKind = d.bossKind || (d.boss ? 'dungeon' : null); this.warns = [];
     this.speed = d.speed * (0.9 + Math.random() * 0.2);
     this.anim = new Animator(d.anims).build();
@@ -7762,6 +7763,14 @@ const RATE_DEF = [
   ['enh',     '강화 성공',       '장비 강화 성공 확률 (최대 100%)'],
   ['elite',   '정예 등장',       '정예 몬스터가 나올 확률 (기본 7%)'],
   ['respawn', '몬스터 재생성',   '죽은 몬스터 · 보스가 다시 나오는 속도 (2 = 두 배 빨리)'],
+  ['pdmg',    '플레이어 공격력', '모든 캐릭터가 주는 피해 (0.8 = 20% 약하게 · 스킬 포함)'],
+  ['mhp',     '몬스터 체력',     '새로 나오는 몬스터 · 보스의 체력'],
+  ['matk',    '몬스터 공격력',   '새로 나오는 몬스터 · 보스가 주는 피해'],
+  ['d_knight', '기사 공격력',    '기사만 (직업별 밸런스)'],
+  ['d_rogue',  '궁수 공격력',    '궁수만'],
+  ['d_wizard', '마법사 공격력',  '마법사만'],
+  ['d_thief',  '도적 공격력',    '도적만'],
+  ['d_priest', '사제 공격력',    '사제만'],
 ];
 const RATE_STEPS = [0.5, 1, 1.5, 2, 3, 5, 10];
 //  RATES = 지금 적용 중인 배율 · LOCAL_RATES = 혼자 할 때(이 브라우저) · SERVER_RATES = 온라인 서버에 접속 중이면 서버가 정한 배율 (모든 접속자 공통)
