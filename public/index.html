@@ -4425,7 +4425,8 @@ function animalArt(type, frame) {
   return (_animalArt[k] = c);
 }
 
-// ---------------------------------------------------------------- 가축 (영지에 돌아다님)
+// ---------------------------------------------------------------- 가축 (자기 자리 근처만 돌아다님)
+const ANIMAL_ROAM = 36;              // 집에서 얼마나 멀리까지 (픽셀 · 약 2칸)
 class Animal {
   constructor(o) {
     Object.assign(this, { id: 0, type: 'chicken', name: '', age: 0, love: 3, fed: false, ready: false, petted: false }, o);
@@ -4434,15 +4435,18 @@ class Animal {
   get def() { return LIVESTOCK[this.type]; }
   get adult() { return this.age >= this.def.grow; }
   get r() { return 4; }
-  toJSON() { const { id, type, name, age, love, fed, ready, petted } = this; return { id, type, name, age, love, fed, ready, petted }; }
-  place(x, y) {
+  toJSON() { const { id, type, name, age, love, fed, ready, petted, hx, hy } = this; return { id, type, name, age, love, fed, ready, petted, hx: Math.round(hx), hy: Math.round(hy) }; }
+  /** 이 자리를 집으로 (근처 2~3칸 안에서만 돌아다님) */
+  place(x, y, spread = 30) {
     const E = typeof game !== 'undefined' && game.estate;
-    for (let i = 0; i < 30; i++) { this.x = x + (Math.random() - 0.5) * 60 * (1 + i / 10); this.y = y + (Math.random() - 0.5) * 40 * (1 + i / 10); if (!E || !E.blocked(this.x, this.y, 4)) return; }
+    for (let i = 0; i < 30; i++) { this.x = x + (Math.random() - 0.5) * spread * (1 + i / 10); this.y = y + (Math.random() - 0.5) * spread * 0.7 * (1 + i / 10); if (!E || !E.blocked(this.x, this.y, 4)) break; }
+    this.hx = this.x; this.hy = this.y; this.target = null;
   }
-  update(dt, game, home) {
+  update(dt, game) {
     this.t += dt; this.pop = Math.max(0, this.pop - dt);
+    if (ranch.carrying === this) { const p = game.player; this.x = p.x; this.y = p.y - 1; this.dir = p.dir === 'left' ? 'left' : 'right'; this.moving = false; return; }   // 안고 가는 중
     if (this.wait > 0) { this.wait -= dt; this.moving = false; return; }
-    if (!this.target) { const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 70; this.target = [home.x + Math.cos(a) * r * 1.3, home.y + Math.sin(a) * r * 0.8]; }
+    if (!this.target) { const a = Math.random() * Math.PI * 2, r = 4 + Math.random() * ANIMAL_ROAM; this.target = [this.hx + Math.cos(a) * r, this.hy + Math.sin(a) * r * 0.7]; }
     const dx = this.target[0] - this.x, dy = this.target[1] - this.y, d = Math.hypot(dx, dy);
     if (d < 3) { this.target = null; this.wait = 1.5 + Math.random() * 5; return; }
     const ox = this.x, oy = this.y, sp = this.def.speed * (this.adult ? 1 : 1.3);
@@ -4454,7 +4458,8 @@ class Animal {
     const art = animalArt(this.type, this.moving && Math.floor(this.t * 6) % 2 ? 1 : 0), sc = this.adult ? 1 : 0.65;
     const w = art.width * sc, h = art.height * sc, bob = this.pop > 0 ? -Math.sin(this.pop * 12) * 2 : 0;
     ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(this.x, this.y, w * 0.4, 2, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.save(); ctx.translate(Math.round(this.x), Math.round(this.y + bob));
+    const lift = ranch.carrying === this ? -18 : 0;
+    ctx.save(); ctx.translate(Math.round(this.x), Math.round(this.y + bob + lift));
     if (this.dir === 'left') ctx.scale(-1, 1);
     ctx.drawImage(art, -w / 2, -h, w, h); ctx.restore();
     if (this.ready) { const y = this.y - h - 8 + Math.sin(game.time * 4) * 1.5; ctx.fillStyle = 'rgba(255,248,220,.95)'; ctx.beginPath(); ctx.arc(this.x, y, 5, 0, Math.PI * 2); ctx.fill(); drawItemIcon(ctx, this.def.product, this.x - 4, y - 4, 8); }
@@ -4519,18 +4524,39 @@ class Worker {
 
 // ---------------------------------------------------------------- 목장 관리
 const ranch = {
-  animals: [], workers: [], hay: 0, nextId: 1, store: new Inventory(30), pen: null, board: { x: 0, y: 0 }, tab: 'workers', log: [],
+  animals: [], workers: [], hay: 0, nextId: 1, store: new Inventory(30), pen: null, board: { x: 0, y: 0 }, tab: 'workers', log: [], carrying: null, boardAt: null,
 
   init(game) {
     this.game = game;
     const E = game.estate, gx = Math.floor(ESTATE.w / 2);
     this.board = E.ranchBoard || { x: (gx + 6) * T + 8, y: (ESTATE.h - 7) * T + 14 };
+    this.boardHome = { tx: Math.floor(this.board.x / T), ty: Math.floor(this.board.y / T) };   // 처음 자리
+  },
+  /** 관리소 게시판이 차지하는 칸 */
+  boardTiles(tx, ty) { return [[tx - 2, ty], [tx - 1, ty], [tx, ty], [tx + 1, ty]]; },
+  /** 관리소를 (tx, ty) 로 옮김 → 실패하면 이유 */
+  moveBoard(tx, ty, silent) {
+    const g = this.game, E = g.estate, h = g.housing, cur = this.boardAt || this.boardHome;
+    if (!silent) {
+      if (!E || !(tx - 2 >= HOME_LOT.x0 - 1 && tx + 1 <= HOME_LOT.x1 + 1 && ty >= HOME_LOT.y0 && ty <= ESTATE.h - 5)) return '영지 안에서만 옮길 수 있어요';
+      for (const [x, y] of this.boardTiles(tx, ty)) {
+        const mine = this.boardTiles(cur.tx, cur.ty).some(([a, b]) => a === x && b === y);
+        if (!mine && (E.solid[E.idx(x, y)] || h.partAt(x, y) || (g.estateFarm && g.estateFarm.get(x, y)) || E.getGround(x, y) === G_WATER)) return '그 자리는 막혀 있어요 (옆 칸까지 4칸이 비어 있어야 해요)';
+      }
+    }
+    for (const [x, y] of this.boardTiles(cur.tx, cur.ty)) E.solid[E.idx(x, y)] = 0;
+    for (const [x, y] of this.boardTiles(tx, ty)) E.solid[E.idx(x, y)] = 1;
+    const x = tx * T + 8, y = ty * T + 14, o = E.objects.find((q) => q.ranch), u = (E.uses || []).find((q) => q.type === 'ranch');
+    if (o) { o.x = x; o.y = y; } if (u) Object.assign(u, { x, y: y - 14, ax: x, ay: y + 12 });
+    this.board = E.ranchBoard = { x, y };
+    this.boardAt = tx === this.boardHome.tx && ty === this.boardHome.ty ? null : { tx, ty };
+    return null;
   },
   get defaultPen() { return { x: Math.floor(ESTATE.w / 2) * T, y: (HOME_LOT.y1 - 6) * T }; },
   get home() { return this.pen || this.defaultPen; },
 
   // ------------------------------------------------ 저장
-  toJSON() { return { animals: this.animals.map((a) => a.toJSON()), workers: this.workers.map((w) => w.toJSON()), hay: this.hay, nextId: this.nextId, store: this.store.slots, pen: this.pen, log: this.log.slice(-8) }; },
+  toJSON() { return { animals: this.animals.map((a) => a.toJSON()), workers: this.workers.map((w) => w.toJSON()), hay: this.hay, nextId: this.nextId, store: this.store.slots, pen: this.pen, log: this.log.slice(-8), boardAt: this.boardAt }; },
   load(o) {
     o = o || {};
     this.animals = (o.animals || []).filter((a) => a && LIVESTOCK[a.type]).map((a) => new Animal(a));
@@ -4539,7 +4565,9 @@ const ranch = {
     this.store = new Inventory(30); this.store.load({ slots: o.store || [] });
     this.pen = o.pen && isFinite(o.pen.x) ? { x: o.pen.x, y: o.pen.y } : null;
     this.log = Array.isArray(o.log) ? o.log.filter((s) => typeof s === 'string').slice(-8) : [];
-    const h = this.home; for (const a of this.animals) a.place(h.x, h.y);
+    this.carrying = null;
+    const ba = o.boardAt && Number.isInteger(o.boardAt.tx) ? o.boardAt : this.boardHome; this.moveBoard(ba.tx, ba.ty, true);   // 관리소 자리 (캐릭터마다)
+    const h = this.home; for (const a of this.animals) { if (isFinite(a.hx) && isFinite(a.hy) && a.hx > 0) { a.x = a.hx; a.y = a.hy; } else a.place(h.x, h.y, 60); }
     for (const w of this.workers) { w.x = this.board.x + (Math.random() - 0.5) * 40; w.y = this.board.y + 18; }
   },
   note(t) { this.log.push(`${this.game.clock.day}일차 ${t}`); this.log = this.log.slice(-8); },
@@ -4634,7 +4662,8 @@ const ranch = {
   // ------------------------------------------------ 매 프레임
   update(dt, game) {
     const visible = game.world === game.estate && game.playing;
-    if (visible) { const h = this.home; for (const a of this.animals) a.update(dt, game, h); }
+    if (!visible && this.carrying) this.drop(true);
+    if (visible) for (const a of this.animals) a.update(dt, game);
     for (const w of this.workers) w.update(dt, game, visible);
   },
   sprites(list, vis) {
@@ -4643,8 +4672,9 @@ const ranch = {
   },
   /** 플레이어 근처 가축 · 일꾼 (상호작용) */
   near(p) {
+    if (this.carrying) return { type: 'animal', obj: this.carrying, label: `${this.carrying.name}(${this.carrying.def.name}) 여기에 내려놓기` };
     let best = null, bd = 20;
-    for (const a of this.animals) { const d = Math.hypot(a.x - p.x, a.y - p.y); if (d < bd) { bd = d; best = { type: 'animal', obj: a, label: a.ready ? `${a.name}(${a.def.name}) · ${ITEMS[a.def.product].name} 거두기` : a.petted ? `${a.name}(${a.def.name}) · 오늘은 이미 쓰다듬었어요` : `${a.name}(${a.def.name}) 쓰다듬기 ♥` }; } }
+    for (const a of this.animals) { const d = Math.hypot(a.x - p.x, a.y - p.y); if (d < bd) { bd = d; best = { type: 'animal', obj: a, label: a.ready ? `${a.name}(${a.def.name}) · ${ITEMS[a.def.product].name} 거두기` : a.petted ? `${a.name}(${a.def.name}) 안고 옮기기` : `${a.name}(${a.def.name}) 쓰다듬기 ♥` }; } }
     for (const w of this.workers) { const d = Math.hypot(w.x - p.x, w.y - p.y); if (d < bd) { bd = d; best = { type: 'worker', obj: w, label: `${w.def.name} ${w.name}과(와) 대화 · 목장 관리` }; } }
     return best;
   },
@@ -4654,10 +4684,17 @@ const ranch = {
     return null;
   },
   /** 플레이어가 가축을 만짐: 거두기 → 쓰다듬기 */
+  /** 안고 있던 가축 내려놓기 (그 자리가 새 집) */
+  drop(silent) {
+    const a = this.carrying; if (!a) return; this.carrying = null;
+    const g = this.game, p = g.player; a.place(p.x + (p.dir === 'left' ? -12 : 12), p.y + 4, 6);
+    if (!silent) { g.popText(a.x, a.y - 18, `${a.name} 여기서 지내요`, '#c8f0a8'); sfx.pickup(); g.save(); }
+  },
   touch(a) {
     const g = this.game, p = g.player;
+    if (this.carrying) { this.drop(); return; }
     if (a.ready) { const r = this.collect(a, p.inv); if (!r) { g.log('가방이 가득 찼어요', '#ff9a8a'); sfx.deny(); return; } g.popText(a.x, a.y - 18, `+${r.n} ${ITEMS[r.id].name}`, '#fff0b0'); g.burst(a.x, a.y - 8, '#fff0b0', 8); sfx.pickup(); g.save(); return; }
-    if (a.petted) { g.popText(a.x, a.y - 18, '오늘은 이미 쓰다듬었어요', '#c8c0b0'); return; }
+    if (a.petted) { this.carrying = a; a.target = null; g.popText(a.x, a.y - 24, `${a.name}을(를) 안았어요 — 원하는 곳에서 E(또는 클릭) = 내려놓기`, '#ffe8b0'); sfx.select(); return; }
     a.petted = true; a.pop = 0.6; g.popText(a.x, a.y - 18, `♥ ${a.name}`, '#ff8aa8'); sfx.select();
     if (!a.fed) g.log(`${a.name}이(가) 배고파 보여요 — 목장 관리소에서 먹이통을 채워 주세요`, '#ffb070');
   },
@@ -4670,9 +4707,9 @@ const ranch = {
     if (!p.inv.spendGold(d.price)) return ui.toast({ ok: false, msg: `골드가 부족해요 (${d.price}G)` });
     const used = new Set(this.animals.map((a) => a.name)), name = d.names.find((n) => !used.has(n)) || d.names[0] + (this.nextId % 100);
     const a = new Animal({ id: this.nextId++, type, name, age: 0, love: 3, fed: false });
-    const h = this.home; a.place(h.x, h.y); if (this.hay > 0) { this.hay--; a.fed = true; }
+    const inE = g.world === g.estate, h = inE ? { x: p.x + 14, y: p.y + 6 } : this.home; a.place(h.x, h.y, inE ? 10 : 40); if (this.hay > 0) { this.hay--; a.fed = true; }
     this.animals.push(a); this.note(`${d.name} ${name} 입양`);
-    ui.toast({ ok: true, msg: `${d.icon} 새끼 ${d.name} "${name}"이(가) 목장에 왔어요! (${d.grow}일 뒤 어른)` }); g.save();
+    ui.toast({ ok: true, msg: `${d.icon} 새끼 ${d.name} "${name}"이(가) ${inE ? '내 옆에' : '목장에'} 왔어요! (${d.grow}일 뒤 어른) · 쓰다듬은 뒤 E 한 번 더 = 안고 옮기기` }); g.save();
   },
   sellAnimal(id) {
     const a = this.animals.find((x) => x.id === id); if (!a) return;
@@ -4702,6 +4739,7 @@ const ranch = {
     if (this.tab === 'store') { ui.storageKey = 'ranch'; ui.storageName = '일꾼 창고'; ui.renderStorage(body, p); return; }
     let html = '';
     if (this.tab === 'workers') {
+      if (inE) html += `<div class="rkSum small">📍 관리소 위치: <button data-mvboard>관리소를 지금 내 자리로 옮기기</button>${this.boardAt ? ' <button data-rsboard>처음 자리로</button>' : ''} <small class="dimtxt">(내 바로 위 칸 · 가로 4칸이 비어 있어야 해요)</small></div>`;
       html += `<div class="rkSum">일꾼 ${this.workers.length}/${RANCH_MAX.workers}명 · 하루 일당 합계 <b>${wageSum}G</b> (매일 아침 06:00 자동 지급 · 이틀 못 받으면 그만둬요) · 06~20시 근무</div>`;
       for (const w of this.workers) html += `<div class="rkRow"><span class="rkIc">${w.def.icon}</span><div class="grow"><b>${w.def.name} ${escapeHtml(w.name)}</b> <small>일당 ${w.def.wage}G · 근무 ${w.days}일 · 오늘까지 한 일 ${w.done}번${w.unpaid ? ' · <span class="bad">일당 밀림!</span>' : ''}</small><br><small class="dimtxt">${w.task ? '지금: ' + ({ water: '물 주는 중', harvest: '수확 중', plant: '씨 뿌리는 중', clear: '밭 치우는 중', collect: '생산물 거두는 중', feed: '먹이통 채우는 중', pet: '가축 돌보는 중' }[w.task.k] || '일하는 중') : g.clock.hour >= 20 || g.clock.hour < 6 ? '퇴근 (밤)' : '할 일을 찾는 중'}</small></div><button data-fire="${w.id}">내보내기</button></div>`;
       html += '<div class="rkSec">일꾼 구하기 <small>(첫날 일당을 먼저 줘요)</small></div>';
@@ -4711,11 +4749,12 @@ const ranch = {
     } else {
       const need = this.animals.length;
       html += `<div class="rkSum">🌾 먹이통 <b>${this.hay}</b> (하루 ${need} 필요 · ${need ? Math.floor(this.hay / need) + '일치' : '-'}) <button data-feed>가방의 사료 · 밀 · 옥수수 넣기</button></div>`;
-      html += `<div class="rkSum small">사료 1 = 2마리 · 밀/옥수수 1 = 1마리 · 사료는 영지 농사 가게에서 6G ${inE ? '<button data-pen>🐾 목장 위치를 지금 내 자리로</button>' : ''}</div>`;
+      html += `<div class="rkSum small">사료 1 = 2마리 · 밀/옥수수 1 = 1마리 · 사료는 영지 농사 가게에서 6G ${inE ? '<button data-pen>🐾 모든 가축을 내 옆으로</button>' : ''}</div>`;
+      html += `<div class="rkSum small">🐾 가축은 <b>자기 자리 근처 2칸</b>에서만 지내요. 영지에서 가축을 쓰다듬은 뒤 <b>E 한 번 더 = 안고 옮기기</b> → 원하는 곳에서 E = 내려놓기 (그 자리가 새 집)</div>`;
       for (const a of this.animals) {
         const d = a.def, hearts = '♥'.repeat(Math.round(a.love / 2)) + '♡'.repeat(5 - Math.round(a.love / 2));
         html += `<div class="rkRow"><span class="rkIc">${d.icon}</span><div class="grow"><b>${escapeHtml(a.name)}</b> <small>${d.name} · ${a.adult ? '어른' : `새끼 (${d.grow - a.age}일 뒤 어른)`} · <span style="color:#ff8aa8">${hearts}</span></small><br><small>${a.fed ? '🍽 오늘 먹음' : '<span class="bad">🍽 배고픔</span>'} · ${a.petted ? '♥ 쓰다듬음' : '쓰다듬기 전'} · ${a.ready ? `<b style="color:#ffe08a">${ITEMS[d.product].name} 준비됨!</b>` : a.adult ? '생산물은 내일 아침' : '자라는 중'}</small></div>
-          ${a.ready ? `<button class="gold" data-col="${a.id}">거두기</button>` : ''}<button data-sell="${a.id}">팔기</button></div>`;
+          ${a.ready ? `<button class="gold" data-col="${a.id}">거두기</button>` : ''}${inE ? `<button data-here="${a.id}">📍 내 옆으로</button>` : ''}<button data-sell="${a.id}">팔기</button></div>`;
       }
       html += `<div class="rkSec">가축 사기 <small>(${this.animals.length}/${RANCH_MAX.animals}마리 · 새끼로 와요)</small></div>`;
       for (const [k, d] of Object.entries(LIVESTOCK)) html += `<div class="rkRow"><span class="rkIc">${d.icon}</span><div class="grow"><b>${d.name}</b> <small>${d.price}G · ${d.grow}일 뒤 어른</small><br><small class="dimtxt">매일 ${ITEMS[d.product].name} ${d.qty[0]}~${d.qty[1]}개${d.chance < 1 ? ` (${Math.round(d.chance * 100)}% 확률)` : ''} · 개당 ${ITEMS[d.product].value}G · 애정이 높으면 더 많이</small></div><button class="gold" data-buy="${k}">사기 ${d.price}G</button></div>`;
@@ -4728,7 +4767,10 @@ const ranch = {
     box.querySelectorAll('[data-sell]').forEach((b) => { b.onclick = () => this.sellAnimal(+b.dataset.sell); });
     box.querySelectorAll('[data-col]').forEach((b) => { b.onclick = () => { const a = this.animals.find((x) => x.id === +b.dataset.col); if (a) { const r = this.collect(a, p.inv); ui.toast(r ? { ok: true, msg: `${ITEMS[r.id].name} ${r.n}개를 가방에 넣었어요` } : { ok: false, msg: '가방이 가득 찼어요' }); } ui.render(); }; });
     const fd = box.querySelector('[data-feed]'); if (fd) fd.onclick = () => { const n = this.fillTrough(p.inv, 999); ui.toast(n ? { ok: true, msg: `먹이통에 ${n} 채웠어요` } : { ok: false, msg: '가방에 사료 · 밀 · 옥수수가 없어요 (영지 농사 가게에서 사료 6G)' }); ui.render(); };
-    const pn = box.querySelector('[data-pen]'); if (pn) pn.onclick = () => { this.pen = { x: Math.round(p.x), y: Math.round(p.y) }; for (const a of this.animals) a.place(this.pen.x, this.pen.y); ui.toast({ ok: true, msg: '가축들이 여기 근처에서 지내요' }); ui.render(); };
+    const pn = box.querySelector('[data-pen]'); if (pn) pn.onclick = () => { this.pen = { x: Math.round(p.x), y: Math.round(p.y) }; for (const a of this.animals) a.place(this.pen.x, this.pen.y + 10, 60); g.save(); ui.toast({ ok: true, msg: '가축들이 내 옆으로 왔어요 — 하나씩 안고 옮겨서 자리를 정해 주세요' }); ui.render(); };
+    box.querySelectorAll('[data-here]').forEach((b) => { b.onclick = () => { const a = this.animals.find((x) => x.id === +b.dataset.here); if (a) { a.place(p.x + 14, p.y + 6, 8); g.save(); ui.toast({ ok: true, msg: `${a.name}이(가) 내 옆으로 왔어요 (여기가 새 집)` }); } ui.render(); }; });
+    const mb = box.querySelector('[data-mvboard]'); if (mb) mb.onclick = () => { const why = this.moveBoard(Math.floor(p.x / T), Math.floor((p.y - 2) / T) - 1); ui.toast(why ? { ok: false, msg: why } : { ok: true, msg: '목장 관리소를 옮겼어요 (일꾼 · 먹이통도 함께)' }); if (!why) g.save(); ui.render(); };
+    const rb = box.querySelector('[data-rsboard]'); if (rb) rb.onclick = () => { this.moveBoard(this.boardHome.tx, this.boardHome.ty); g.save(); ui.toast({ ok: true, msg: '목장 관리소를 처음 자리로 돌려놨어요' }); ui.render(); };
   },
 };
 
@@ -5384,6 +5426,10 @@ class Player {
       const obj = o.obj, tx = obj.ax ?? obj.x, ty = obj.ay ?? obj.y + 10;
       if (Math.hypot(tx - this.x, ty - this.y) < (obj.reach || 18)) { this.order = null; game.interactWith(o.type, obj); return [0, 0]; }
       if (!o.path) o.path = [[tx, ty]];
+      // v47: 막혀서 못 가면(1초 동안 거의 안 움직임) → 가까우면 그냥 사용 · 멀면 멈춤 (예전엔 벽에 대고 계속 걸어서 멈춘 것처럼 보였음)
+      const moved = o.lx === undefined ? 1 : Math.hypot(this.x - o.lx, this.y - o.ly); o.lx = this.x; o.ly = this.y;
+      o.stuck = moved < 0.2 ? (o.stuck || 0) + dt : 0;
+      if (o.stuck > 0.6) { this.order = null; if (Math.hypot(tx - this.x, ty - this.y) < 48 || Math.hypot(obj.x - this.x, obj.y - this.y) < 40) game.interactWith(o.type, obj); return [0, 0]; }
       const v = this.followPath(o.path); if (!o.path.length) { this.order = null; game.interactWith(o.type, obj); }
       return v;
     }
@@ -7526,7 +7572,7 @@ class Interior extends TileMap {
     }
     this.npcs = d.npcs.map((n) => new NPC(n));
     for (const n of this.npcs) this.solid[this.idx(Math.floor(n.x / T), Math.floor(n.y / T))] = 1;
-    this.uses = (d.uses || []).map((u) => ({ ...u, x: u.tx * T + 8, y: u.ty * T + 12, ax: u.tx * T + 8, ay: u.ty * T + 26, reach: 16 }));
+    this.uses = (d.uses || []).map((u) => ({ ...u, x: u.tx * T + 8, y: u.ty * T + 12, ...this.standSpot(u.tx, u.ty), reach: 16 }));
     // 아래쪽 문 = 나가는 포탈
     if (!d.noDoor) this.portals.push({ x: (d.w >> 1) * T, y: d.h * T - 4, ax: (d.w >> 1) * T, ay: d.h * T - 6, exit: true, name: '밖으로 나가기', reach: 14 });
     for (const s of d.stairs || []) this.portals.push({ x: s.tx * T + 8, y: (s.ty + 1) * T + 4, ax: s.tx * T + 8, ay: (s.ty + 1) * T + 8, floorTo: s.to, up: s.up, name: s.up ? `${s.to}층으로 올라가기` : `${s.to}층으로 내려가기`, reach: 16 });
@@ -7545,6 +7591,14 @@ class Interior extends TileMap {
       g.fillStyle = '#4a3018'; g.fillRect(x + 2, y + T, 3, H - T); g.fillRect(x + W - 5, y + T, 3, H - T); g.fillRect(x + 2, y + T, W - 4, 2);
     }
     g.fillStyle = '#ffe8b0'; g.font = 'bold 7px sans-serif'; g.textAlign = 'center'; g.fillText(s.up ? `▲ ${s.to}층` : `▼ ${s.to}층`, x + W / 2, y + (s.up ? 8 : T + 30));
+  }
+  /** 가구를 쓰려고 서는 자리: 아래 칸 → 양옆 → 위 칸 중 비어 있는 곳 (v47: 아래가 막혀 있으면 영영 못 쓰던 문제) */
+  standSpot(tx, ty) {
+    const free = (x, y) => x >= 0 && y >= 0 && x < this.w && y < this.h && !this.solid[this.idx(x, y)];
+    let a = tx, b = tx; while (a > 0 && this.solid[this.idx(a - 1, ty)] && b - a < 6) a--; while (b < this.w - 1 && this.solid[this.idx(b + 1, ty)] && b - a < 6) b++;   // 가구 폭
+    const cand = [[tx, ty + 1], [a, ty + 1], [b, ty + 1], [a - 1, ty], [b + 1, ty], [tx, ty - 1], [a - 1, ty + 1], [b + 1, ty + 1]];
+    for (const [x, y] of cand) if (free(x, y)) return { ax: x * T + 8, ay: y * T + 10 };
+    return { ax: tx * T + 8, ay: ty * T + 26 };
   }
   propRect(name) { return IN_PROP[name] || IN_STATION[name].slice(1); }
   zoneOfPos() { return 'indoor'; }
@@ -9036,7 +9090,7 @@ class Game {
     if (best) return best;
     if (w.isEstate) { const r = ranch.near(p); if (r) return r; }
     const pt = w.portalAt(p.x, p.y, 16); if (pt) return { type: 'enter', obj: pt, label: pt.exit ? '밖으로 나가기' : pt.floorTo ? pt.name : `들어가기 · ${pt.name}` };
-    for (const u of w.uses || []) if (Math.hypot(u.ax - p.x, u.ay - p.y) < 20) return { type: 'use', obj: u, label: u.name };
+    for (const u of w.uses || []) if (Math.hypot(u.ax - p.x, u.ay - p.y) < 20 || (this.indoor && Math.hypot(u.x - p.x, u.y - p.y) < 22)) return { type: 'use', obj: u, label: u.name };
     if (this.farmNow && p.farming) {                           // 텃밭: 삽 · 물뿌리개를 들었을 때만 (바라보는 칸 → 서 있는 칸)
       const f = this.bestFarmTile(p);
       if (f && (p.canFarm(f.a) || !f.a.act)) {
