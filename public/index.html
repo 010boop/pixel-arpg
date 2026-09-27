@@ -1680,7 +1680,9 @@ class Inventory {
 
   sort() {
     const order = { weapon: 0, shield: 1, helmet: 2, armor: 3, boots: 4, accessory: 5, potion: 6, food: 7, seed: 8, material: 9 };
-    const items = this.slots.filter(Boolean).sort((a, b) => order[ITEMS[a.id].type] - order[ITEMS[b.id].type] || ITEMS[b.id].value - ITEMS[a.id].value);
+    const merged = [];                                          // v49: 같은 아이템 묶음 합치기 (999개까지)
+    for (const s of this.slots.filter(Boolean)) { const max = ITEMS[s.id].stack || 1; let q = s.qty; for (const m of merged) if (q > 0 && m.id === s.id && m.qty < max) { const n = Math.min(q, max - m.qty); m.qty += n; q -= n; } while (q > 0) { const n = Math.min(q, max); merged.push({ ...s, qty: n }); q -= n; } }
+    const items = merged.sort((a, b) => order[ITEMS[a.id].type] - order[ITEMS[b.id].type] || ITEMS[b.id].value - ITEMS[a.id].value);
     this.slots = [...items, ...new Array(this.size - items.length).fill(null)];
     this.onChange();
   }
@@ -8828,6 +8830,10 @@ const ZONE_NAME = {
   forest: '동쪽 숲 · Lv 5~8', grave: '북쪽 묘지 · Lv 7~11', lair: '대족장의 둥지 · Lv 12 보스',
   waste: '붉은 황무지 · Lv 12~16', wastelair: '황무지 군주의 제단 · Lv 19 보스', snow: '얼어붙은 설원 · Lv 15~21', frostlair: '서리 리치의 무덤 · Lv 24 보스',
 };
+
+// v49: 장비(무기 · 방어구 · 장신구)와 생활 도구를 뺀 모든 아이템(물약 · 음식 · 재료 · 씨앗 · 주문서 …) 999개까지 겹침
+const EQUIP_TYPES = ['weapon', 'shield', 'helmet', 'armor', 'boots', 'accessory'];
+for (const d of Object.values(ITEMS)) if (d && !EQUIP_TYPES.includes(d.type) && !d.tool) d.stack = 999;
 
 class Game {
   constructor(canvas) {
