@@ -328,7 +328,7 @@
 //  ※ 에셋을 다른 폴더에 두었다면 ASSET_ROOT 만 바꾸세요. 예) './assets/'
 // =====================================================================
 
-const GAME_VERSION = 'v60';   // ◀ 업데이트마다 올림 · 타이틀 화면 오른쪽 아래 · 서버 /status 에 표시
+const GAME_VERSION = 'v61';   // ◀ 업데이트마다 올림 · 타이틀 화면 오른쪽 아래 · 서버 /status 에 표시
 const ASSET_ROOT = './';   // ◀ Entities / Weapons / Environment 가 들어있는 폴더
 
 const NPC_DIR = "Entities/Npc's/";
@@ -2764,10 +2764,13 @@ function mapMarkers(game) {
   list.push({ tx: 160, ty: 116, icon: '☠', name: '서리 리치의 무덤 (보스 Lv24)', kind: 'dungeon', big: true });
   for (const [x, y] of [[20, 52], [80, 66], [34, 16], [96, 104], [30, 100], [130, 60]]) list.push({ tx: x, ty: y, icon: '🎣', name: '낚시터', kind: 'fish' });
   list.push({ tx: 98, ty: 12, icon: '💀', name: '대족장의 둥지 (보스)', kind: 'dungeon', big: true });
+  list.push({ tx: 242, ty: 12, icon: '🌋', name: '화염 거인의 분화구 (보스 Lv74)', kind: 'dungeon', big: true });
+  list.push({ tx: 242, ty: 116, icon: '🔺', name: '사막 왕의 피라미드 (보스 Lv84)', kind: 'dungeon', big: true });
+  list.push({ tx: 214, ty: 90, icon: '🎣', name: '오아시스 낚시터', kind: 'fish' });
   list.push({ tx: 56, ty: 24, icon: '⚰', name: '북쪽 묘지', kind: 'dungeon' });
   return list;
 }
-const MAP_ZONES = [['바람 초원', 56, 76], ['서쪽 늪지', 20, 40], ['동쪽 숲', 88, 44], ['북쪽 묘지', 44, 12], ['대족장의 둥지', 99, 6], ['붉은 황무지', 138, 44], ['얼어붙은 설원', 80, 96], ['황무지 군주', 158, 6], ['서리 리치', 158, 120]];
+const MAP_ZONES = [['바람 초원', 56, 76], ['서쪽 늪지', 20, 40], ['동쪽 숲', 88, 44], ['북쪽 묘지', 44, 12], ['대족장의 둥지', 99, 6], ['붉은 황무지', 138, 44], ['얼어붙은 설원', 80, 96], ['황무지 군주', 158, 6], ['서리 리치', 158, 120], ['🌋 불타는 화산 지대', 205, 36], ['🏜 고대 사막 유적', 205, 84], ['화염 거인', 240, 6], ['사막 왕', 240, 122]];
 
 const WorldMap = {
   K: 6,        // 타일 1칸 = 6px
@@ -4920,6 +4923,15 @@ Object.assign(ITEMS, {
   mana_potion:     { name: '마나 물약',   type: 'potion', mp: 40,  value: 25, stack: 999, icon: ['bits', 'mpot'],  desc: '마나 40 회복' },
   big_mana_potion: { name: '대형 마나 물약', type: 'potion', mp: 120, value: 70, stack: 999, icon: ['bits', 'mpot2'], desc: '마나 120 회복' },
 });
+// v61: 대형 무한 물약 — 써도 없어지지 않음 (재사용 대기시간만) · 아주 비싼 재료 · 판매 불가 · 자동사냥 물약으로 지정 가능
+Object.assign(ITEMS, {
+  inf_mana_potion: { name: '대형 무한 마나 물약', type: 'potion', mp: 150, infinite: 8, value: 2, stack: 1, icon: ['bits', 'mpot2'], tint: 'drop-shadow(0 0 2px #9a6aff) brightness(1.25)', desc: '마나 150 회복 · 써도 없어지지 않아요 (8초마다) · 판매 불가' },
+  inf_potion:      { name: '대형 무한 물약',      type: 'potion', heal: 150, infinite: 8, value: 2, stack: 1, icon: ['int', 581, 291, 7, 10], tint: 'drop-shadow(0 0 2px #ffd860) brightness(1.2)', desc: '체력 150 회복 · 써도 없어지지 않아요 (8초마다) · 판매 불가' },
+});
+RECIPES.push(
+  { station: 'alchemy', cat: '무한 물약', result: 'inf_mana_potion', qty: 1, mats: { big_mana_potion: 300, essence: 30, mana: 150, dragon_scale: 3 }, gold: 300000, tier: 3 },
+  { station: 'alchemy', cat: '무한 물약', result: 'inf_potion',      qty: 1, mats: { big_potion: 300, essence: 30, herb: 300, dragon_scale: 3 },    gold: 300000, tier: 3 },
+);
 SHOPS.general.stock.push({ id: 'mana_potion' }, { id: 'big_mana_potion' }, { id: 'auto_1h', price: 150000 }, { id: 'auto_3h', price: 450000 }, { id: 'auto_8h', price: 1200000 });
 RECIPES.push(
   { station: 'alchemy', cat: '마나 물약', result: 'mana_potion', qty: 2, mats: { mana: 1, herb: 2 }, gold: 5, tier: 1 },
@@ -5506,6 +5518,16 @@ class Player {
     const s = this.inv.slots[i]; if (!s || !isConsumable(s.id)) return false;
     const d = ITEMS[s.id];
     if (d.autoMin) { this.inv.removeAt(i, 1); autohunt.addTime(d.autoMin); sfx.coin(); return true; }   // 자동사냥 이용권
+    if (d.infinite) {                                                                                   // 무한 물약: 없어지지 않고 대기시간만
+      this.infCd = this.infCd || {}; const left = (this.infCd[s.id] || 0) - performance.now() / 1000;
+      if (left > 0) { game.popText(this.x, this.y - 32, `${Math.ceil(left)}초`, '#a8a090'); return false; }
+      if (d.mp && this.mp >= this.maxMp) { game.log('마나가 가득 찼습니다'); return false; }
+      if (d.heal && this.hp >= this.maxHp) { game.log('체력이 가득 찼습니다'); return false; }
+      this.infCd[s.id] = performance.now() / 1000 + d.infinite;
+      if (d.mp) { this.mp = Math.min(this.maxMp, this.mp + d.mp); game.popText(this.x, this.y - 32, '+' + d.mp, '#8fb8ff'); game.burst(this.x, this.y - 12, '#8fb8ff', 12); }
+      if (d.heal) { this.hp = Math.min(this.maxHp, this.hp + d.heal); game.popText(this.x, this.y - 32, '+' + d.heal, '#7dff8a'); game.burst(this.x, this.y - 12, '#7dff8a', 12); }
+      sfx.heal(); return true;
+    }
     if (d.mp && !d.heal) {                                                                              // 마나 물약
       if (this.mp >= this.maxMp) { game.log('마나가 가득 찼습니다'); return false; }
       this.inv.removeAt(i, 1); this.mp = Math.min(this.maxMp, this.mp + d.mp); game.popText(this.x, this.y - 32, '+' + d.mp, '#8fb8ff'); sfx.heal(); game.burst(this.x, this.y - 12, '#8fb8ff', 10); return true;
@@ -6489,10 +6511,10 @@ class TileMap {
 <script>
 // =====================================================================
 //  world.js — 오픈 필드 맵 (생성 · 바닥 렌더 · 충돌 · 오브젝트 · 몬스터 스폰 지점)
-//  타일 16px, 맵 170 x 125 타일 — 원래 땅(110 x 80) + 동쪽 '붉은 황무지' + 남쪽 '얼어붙은 설원'
+//  타일 16px, 맵 250 x 125 타일 — 원래 땅(110 x 80) + 동쪽 '붉은 황무지' + 남쪽 '얼어붙은 설원' + (v61) 더 동쪽 '화산 지대' · '고대 사막'
 // =====================================================================
 
-const T = 16, MW = 170, MH = 125;
+const T = 16, MW = 250, MH = 125;      // v61: 170 → 250 (동쪽 화산 · 사막)
 const OLD_W = 110, OLD_H = 80;          // 확장 전 크기 (안개 세이브 옮길 때 씀)
 const TOWN = { x0: 45, y0: 43, x1: 67, y1: 63, cx: 56, cy: 54 };
 
@@ -6537,6 +6559,7 @@ class World extends TileMap {
     if (this.inTown(tx, ty)) return 'town';
     if (tx >= ESTATE_GATE.x0 - 1 && tx <= ESTATE_GATE.x1 + 1 && ty >= ESTATE_GATE.y0 - 1 && ty <= ESTATE_GATE.y1 + 1) return 'homelot';   // 내 집 터 (안전 지대)
     if (tx >= FARM_ZONE.x0 - 1 && tx <= FARM_ZONE.x1 + 1 && ty >= FARM_ZONE.y0 - 1 && ty <= FARM_ZONE.y1 + 1) return 'farm';   // 텃밭 (안전 지대)
+    if (tx >= 170) return ty < 62 ? (tx > 232 && ty < 22 ? 'volcanolair' : 'volcano') : (tx > 232 && ty > 104 ? 'ruinlair' : 'desert');   // v61 새 지역
     if (ty >= 82) return tx > 150 && ty > 104 ? 'frostlair' : 'snow';      // 남쪽 설원 (오른쪽 아래 끝 = 서리 리치)
     if (tx >= 110) return tx > 150 && ty < 24 ? 'wastelair' : 'waste';      // 동쪽 황무지 (오른쪽 위 끝 = 황무지 군주)
     if (tx > 88 && ty < 22) return 'lair';
@@ -6556,6 +6579,13 @@ class World extends TileMap {
     pond(20, 52, 6); pond(80, 66, 4); pond(34, 16, 3);
     pond(96, 104, 6); pond(30, 100, 4); pond(130, 60, 4);                   // 설원 호수 · 황무지 오아시스
     for (let ty = 0; ty < this.h; ty++) for (let tx = 0; tx < this.w; tx++) if (this.zone[this.idx(tx, ty)].startsWith('waste') && this.getGround(tx, ty) === G_GRASS && noise(tx * 0.12, ty * 0.12, 41) > 0.45) this.setGround(tx, ty, G_DIRT);   // 황무지: 메마른 흙
+    // v61 화산: 용암 웅덩이(물 타일 · 붉게 그림) · 검은 흙 / 사막: 거의 모래(흙) · 오아시스
+    pond(200, 30, 5); pond(222, 46, 4); pond(186, 12, 3); pond(214, 90, 5);
+    for (let ty = 0; ty < this.h; ty++) for (let tx = 170; tx < this.w; tx++) {
+      const z = this.zone[this.idx(tx, ty)]; if (this.getGround(tx, ty) !== G_GRASS) continue;
+      if (/^volcano/.test(z) && noise(tx * 0.1, ty * 0.1, 43) > 0.4) this.setGround(tx, ty, G_DIRT);
+      if ((z === 'desert' || z === 'ruinlair') && noise(tx * 0.09, ty * 0.09, 47) > 0.22) this.setGround(tx, ty, G_DIRT);
+    }
     // 마을 광장 & 길
     for (let ty = TOWN.y0; ty <= TOWN.y1; ty++) for (let tx = TOWN.x0; tx <= TOWN.x1; tx++) {
       const dx = tx - TOWN.cx, dy = ty - TOWN.cy;
@@ -6574,6 +6604,7 @@ class World extends TileMap {
     road(56, 63, 56, 76); road(56, 43, 56, 12); road(67, 54, 100, 50); road(45, 54, 8, 40);
     road(56, 20, 95, 12); road(56, 70, 28, 72);
     road(100, 50, 140, 40); road(140, 40, 158, 14); road(56, 76, 60, 104); road(60, 104, 150, 112); road(28, 72, 30, 96);   // 새 지역으로 가는 길
+    road(140, 40, 196, 40); road(196, 40, 238, 14); road(150, 112, 200, 100); road(200, 100, 238, 114); road(196, 40, 200, 100);   // v61 화산 · 사막 길
     // 언덕 (고원) — 노이즈로 높은 땅을 만들고, 남쪽 가장자리는 절벽(막힘)
     this.hill = new Uint8Array(this.w * this.h);
     this.cliff = new Uint8Array(this.w * this.h);
@@ -6615,6 +6646,8 @@ class World extends TileMap {
       else if (z === 'grave' || z === 'lair') { if (h < 0.035) o = 'deadtree'; else if (h < 0.06) o = 'rock'; else if (h < 0.075) o = 'pebble'; }
       else if (z === 'waste' || z === 'wastelair') { if (h < 0.03) o = 'deadtree'; else if (h < 0.07) o = h < 0.05 ? 'rock' : 'rock2'; else if (h < 0.085) o = 'pebble'; }
       else if (z === 'snow' || z === 'frostlair') { if ((n > 0.62 && h < 0.14) || h < 0.018) o = h < 0.07 ? 'pine' : 'pine2'; else if (h < 0.055) o = 'rock'; else if (h < 0.065) o = 'deadtree'; }
+      else if (/^volcano/.test(z)) { if (h < 0.035) o = 'deadtree'; else if (h < 0.09) o = h < 0.065 ? 'rock' : 'rock2'; else if (h < 0.1) o = 'pebble'; }
+      else if (z === 'desert' || z === 'ruinlair') { if (h < 0.012) o = 'deadtree'; else if (h < 0.04) o = h < 0.028 ? 'rock2' : 'pebble'; else if (h < 0.05) o = 'bush2'; }
       else { if ((n > 0.62 && h < 0.3) || h < 0.02) o = ['oak', 'oak2', 'oak3'][Math.floor(h * 100) % 3]; else if (h < 0.05) o = h < 0.035 ? 'bush' : 'bush2'; else if (h < 0.06) o = 'rock2'; else if (h < 0.068) o = 'fern'; }
       if (o) this.addObject(o, tx, ty, h < 0.5);
     }
@@ -6649,7 +6682,7 @@ class World extends TileMap {
     this.flowers = [];
     for (let ty = 0; ty < this.h; ty++) for (let tx = 0; tx < this.w; tx++) {
       const i = this.idx(tx, ty), z = this.zone[i];
-      if (this.ground[i] !== G_GRASS || this.solid[i] || z === 'grave' || z === 'lair' || z === 'farm' || /^(snow|frost|waste)/.test(z) || (ty > 0 && this.cliff[this.idx(tx, ty - 1)])) continue;
+      if (this.ground[i] !== G_GRASS || this.solid[i] || z === 'grave' || z === 'lair' || z === 'farm' || /^(snow|frost|waste|volcano|desert|ruin)/.test(z) || (ty > 0 && this.cliff[this.idx(tx, ty - 1)])) continue;
       if (hash2(tx, ty, 9) < (z === 'town' ? 0.18 : 0.06)) this.flowers.push([tx, ty]);
     }
     // 몬스터 스폰 지점
@@ -6660,9 +6693,11 @@ class World extends TileMap {
       grave:  [['skeleton', 7], ['skel_rogue', 8], ['skel_mage', 8], ['skeleton', 9], ['skel_war', 10]],
       waste:  [['orc_elite_rg', 12], ['orc_elite', 13], ['orc_elite_sh', 13], ['orc_elite', 15], ['orc_elite_rg', 16]],
       snow:   [['frost_skel', 15], ['frost_mage', 16], ['frost_skel', 17], ['frost_war', 18], ['frost_mage', 19], ['frost_war', 21]],
+      volcano: [['magma_orc', 22], ['magma_rogue', 22], ['magma_shaman', 23], ['magma_orc', 24], ['cinder_skel', 25], ['magma_shaman', 26]],   // v61 (예전 레벨 → Lv 61~71)
+      desert:  [['sand_skel', 26], ['mummy_mage', 27], ['sand_warlord', 28], ['sand_skel', 28], ['tomb_guard', 29], ['mummy_mage', 30]],     // v61 (→ Lv 71~81)
     };
-    const fixedLv = { waste: 1, snow: 1 };                                    // 새 지역은 표의 레벨 그대로
-    const counts = { meadow: 16, west: 14, forest: 18, grave: 20, waste: 34, snow: 44 };
+    const fixedLv = { waste: 1, snow: 1, volcano: 1, desert: 1 };                                    // 새 지역은 표의 레벨 그대로
+    const counts = { meadow: 16, west: 14, forest: 18, grave: 20, waste: 34, snow: 44, volcano: 46, desert: 48 };
     for (const [z, n] of Object.entries(counts)) {
       let made = 0, tries = 0;
       while (made < n && tries++ < 5000) {
@@ -6680,6 +6715,8 @@ class World extends TileMap {
     this.spawns.push({ type: 'warlord', lv: 37, x: 98 * T, y: 12 * T, mon: null, timer: 0, boss: true });
     this.spawns.push({ type: 'waste_lord', lv: 54, x: 160 * T, y: 12 * T, mon: null, timer: 0, boss: true });
     this.spawns.push({ type: 'frost_lich', lv: 66, x: 160 * T, y: 116 * T, mon: null, timer: 0, boss: true });
+    this.spawns.push({ type: 'fire_giant', lv: 74, x: 242 * T, y: 12 * T, mon: null, timer: 0, boss: true });      // v61 화염 거인의 분화구
+    this.spawns.push({ type: 'sand_pharaoh', lv: 84, x: 242 * T, y: 116 * T, mon: null, timer: 0, boss: true });   // v61 사막 왕의 피라미드
     const zonePts = (z) => this.spawns.filter((s) => s.zone === z);
     const farthest = (z, avoid = []) => zonePts(z).filter((s) => avoid.every((a) => Math.hypot(s.x - a.x, s.y - a.y) > 30 * T)).sort((a, b) => Math.hypot(b.x - TOWN.cx * T, b.y - TOWN.cy * T) - Math.hypot(a.x - TOWN.cx * T, a.y - TOWN.cy * T))[0];
     const bosses = this.spawns.filter((s) => s.boss);
@@ -6688,7 +6725,7 @@ class World extends TileMap {
     const rc = farthest('waste', bosses); if (rc) this.spawns.push({ type: 'raid_chaos', lv: 70, x: rc.x, y: rc.y, mon: null, timer: 5, boss: true });
     const rt = farthest('snow', bosses); if (rt) this.spawns.push({ type: 'raid_titan', lv: 78, x: rt.x, y: rt.y, mon: null, timer: 5, boss: true });
     // 필드 보스: 지역 안 아무 곳에 몇 분마다 나타남 (처음엔 1~3분 뒤)
-    for (const [z, type, lv] of [['meadow', 'fb_meadow', 8], ['west', 'fb_west', 15], ['forest', 'fb_forest', 24], ['grave', 'fb_grave', 31], ['waste', 'fb_waste', 45], ['snow', 'fb_snow', 57]]) {
+    for (const [z, type, lv] of [['meadow', 'fb_meadow', 8], ['west', 'fb_west', 15], ['forest', 'fb_forest', 24], ['grave', 'fb_grave', 31], ['waste', 'fb_waste', 45], ['snow', 'fb_snow', 57], ['volcano', 'fb_volcano', 68], ['desert', 'fb_desert', 78]]) {
       const pts = zonePts(z).map((s) => [s.x, s.y]); if (!pts.length) continue;
       this.spawns.push({ type, lv, x: pts[0][0], y: pts[0][1], pts, zone: z, mon: null, timer: 60 + r() * 120, boss: true, field: true });
     }
@@ -6807,6 +6844,13 @@ class World extends TileMap {
       else if (z === 'waste' || z === 'wastelair') { g.fillStyle = z === 'wastelair' ? 'rgba(120,30,10,.42)' : 'rgba(150,70,30,.3)'; g.fillRect(tx * T, ty * T, 16, 16); }
       else if (z === 'snow' || z === 'frostlair') { g.fillStyle = z === 'frostlair' ? 'rgba(200,220,255,.78)' : 'rgba(238,245,255,.8)'; g.fillRect(tx * T, ty * T, 16, 16); g.fillStyle = 'rgba(255,255,255,.8)'; if (hash2(tx, ty, 61) < 0.5) g.fillRect(tx * T + Math.floor(hash2(tx, ty, 62) * 14), ty * T + Math.floor(hash2(tx, ty, 63) * 14), 2, 1); }
       else if (z === 'forest' && gr === G_GRASS) { g.fillStyle = 'rgba(0,30,20,.2)'; g.fillRect(tx * T, ty * T, 16, 16); }
+      else if (/^volcano/.test(z)) { g.fillStyle = z === 'volcanolair' ? 'rgba(70,12,4,.62)' : 'rgba(40,16,10,.5)'; g.fillRect(tx * T, ty * T, 16, 16); if (hash2(tx, ty, 81) < 0.05) { g.fillStyle = 'rgba(255,110,30,.55)'; g.fillRect(tx * T + Math.floor(hash2(tx, ty, 82) * 12), ty * T + Math.floor(hash2(tx, ty, 83) * 14), 3, 1); } }
+      else if (z === 'desert' || z === 'ruinlair') { g.fillStyle = z === 'ruinlair' ? 'rgba(210,160,80,.62)' : 'rgba(236,200,120,.55)'; g.fillRect(tx * T, ty * T, 16, 16); if (hash2(tx, ty, 84) < 0.3) { g.fillStyle = 'rgba(180,130,60,.35)'; g.fillRect(tx * T + Math.floor(hash2(tx, ty, 85) * 12), ty * T + Math.floor(hash2(tx, ty, 86) * 14), 4, 1); } }
+    }
+    for (let ty = 0; ty < this.h; ty++) for (let tx = 170; tx < this.w; tx++) {           // v61 화산의 물 = 용암
+      const i = this.idx(tx, ty); if (this.ground[i] !== G_WATER || !/^volcano/.test(this.zone[i])) continue;
+      g.fillStyle = 'rgba(255,80,10,.82)'; g.fillRect(tx * T, ty * T, 16, 16);
+      g.fillStyle = 'rgba(255,200,60,.55)'; if (hash2(tx, ty, 87) < 0.5) g.fillRect(tx * T + Math.floor(hash2(tx, ty, 88) * 10), ty * T + Math.floor(hash2(tx, ty, 89) * 12), 5, 2);
     }
     // 3) 바닥 장식: 풀 · 꽃 · 자갈 · 잔가지 · 버섯 · 갈대
     const deco = (img, r, x, y) => { if (img) g.drawImage(img, r[0], r[1], r[2], r[3], Math.round(x - r[2] / 2), Math.round(y - r[3]), r[2], r[3]); };
@@ -6884,8 +6928,8 @@ class World extends TileMap {
     const g = m.getContext('2d'), im = g.createImageData(this.w, this.h);
     for (let i = 0; i < this.w * this.h; i++) {
       const gr = this.ground[i], z = this.zone[i];
-      let c = gr === G_WATER ? [58, 120, 200] : gr === G_DIRT ? [150, 110, 70] : gr === G_COBBLE ? [150, 140, 128] :
-        z === 'farm' ? [140, 110, 60] : z === 'homelot' ? [170, 150, 100] : z === 'grave' ? [70, 64, 90] : z === 'lair' ? [110, 60, 40] : z === 'forest' ? [40, 90, 50] : z === 'waste' ? [150, 96, 60] : z === 'wastelair' ? [130, 60, 40] : z === 'snow' ? [214, 226, 238] : z === 'frostlair' ? [180, 196, 230] : [80, 140, 60];
+      let c = gr === G_WATER ? (/^volcano/.test(z) ? [230, 80, 20] : [58, 120, 200]) : gr === G_DIRT && /^volcano/.test(z) ? [60, 36, 30] : gr === G_DIRT && /^(desert|ruin)/.test(z) ? [226, 196, 130] : gr === G_DIRT ? [150, 110, 70] : gr === G_COBBLE ? [150, 140, 128] :
+        z === 'farm' ? [140, 110, 60] : z === 'homelot' ? [170, 150, 100] : z === 'grave' ? [70, 64, 90] : z === 'lair' ? [110, 60, 40] : z === 'forest' ? [40, 90, 50] : z === 'waste' ? [150, 96, 60] : z === 'wastelair' ? [130, 60, 40] : z === 'snow' ? [214, 226, 238] : z === 'frostlair' ? [180, 196, 230] : z === 'volcano' ? [70, 40, 34] : z === 'volcanolair' ? [110, 30, 16] : z === 'desert' ? [220, 190, 120] : z === 'ruinlair' ? [200, 150, 80] : [80, 140, 60];
       if (this.hill && this.hill[i]) c = c.map((v) => Math.min(255, v * 1.18));
       if (this.solid[i] && gr !== G_WATER) c = c.map((v) => v * 0.55);
       im.data.set([...c, 255], i * 4);
@@ -7854,6 +7898,47 @@ function highMatDrops(level, elite) {
 </script>
 <script>
 // =====================================================================
+//  new_zones.js — v61 새 지역 (필드 동쪽으로 넓힘 170 → 250칸)
+//
+//   🌋 불타는 화산 지대  (동쪽 위)   Lv 61~71 · 끝 = 화염 거인의 분화구 (던전 보스)
+//   🏜 고대 사막 유적     (동쪽 아래) Lv 71~81 · 끝 = 사막 왕의 피라미드 (던전 보스)
+//   가는 길: 붉은 황무지 동쪽 끝 → 화산 · 얼어붙은 설원 동쪽 끝 → 사막
+//   몬스터 그림은 기존 오크 · 해골 팩에 색을 입혀 씀 (tint)
+// =====================================================================
+
+const FIRE = 'hue-rotate(-35deg) saturate(2.4) brightness(0.85) contrast(1.15)';
+const ASH = 'grayscale(0.6) brightness(0.55) contrast(1.4) sepia(0.5) hue-rotate(-30deg)';
+const SAND = 'sepia(1) saturate(1.6) hue-rotate(-8deg) brightness(1.15)';
+const MUMMY = 'sepia(0.8) saturate(0.6) brightness(1.25) contrast(0.9)';
+const mk = (base, o) => ({ ...MONSTERS[base], boss: false, bossKind: undefined, set: undefined, ...o });
+Object.assign(MONSTERS, {
+  // 🌋 화산
+  magma_orc:    mk('orc_elite',    { name: '용암 오크 광전사', hp: 170, atk: 30, speed: 30, xp: 120, gold: [30, 55], tint: FIRE, drops: [['ore', 0.6, 2, 4], ['steel_ingot', 0.15, 1, 1], ['dragon_scale', 0.03, 1, 1], ['essence', 0.04, 1, 1]] }),
+  magma_rogue:  mk('orc_elite_rg', { name: '재의 암살자',     hp: 110, atk: 28, speed: 66, xp: 105, gold: [28, 50], tint: ASH,  drops: [['tough_hide', 0.3, 1, 2], ['magic_hide', 0.08, 1, 1], ['dragon_scale', 0.02, 1, 1]] }),
+  magma_shaman: mk('orc_elite_sh', { name: '화염 주술사',     hp: 120, atk: 31, speed: 26, xp: 125, gold: [32, 58], tint: FIRE, shot: '#ff7a2a', drops: [['mana', 0.5, 1, 3], ['essence', 0.06, 1, 1], ['dragon_scale', 0.03, 1, 1]] }),
+  cinder_skel:  mk('frost_war',    { name: '잿불 해골 기사',  hp: 210, atk: 33, speed: 24, xp: 150, gold: [36, 64], tint: ASH,  drops: [['bone', 0.8, 2, 4], ['gold_ingot', 0.12, 1, 1], ['dragon_scale', 0.04, 1, 1]] }),
+  // 🏜 사막
+  sand_skel:    mk('frost_skel',   { name: '모래 해골',       hp: 200, atk: 34, speed: 34, xp: 150, gold: [38, 66], tint: SAND, drops: [['bone', 0.7, 2, 4], ['gold_ore', 0.3, 1, 2], ['dragon_scale', 0.04, 1, 1]] }),
+  mummy_mage:   mk('frost_mage',   { name: '미라 주술사',     hp: 170, atk: 36, speed: 24, xp: 165, gold: [40, 70], tint: MUMMY, shot: '#ffd060', drops: [['rare_thread', 0.3, 1, 2], ['essence', 0.08, 1, 1], ['primal_shard', 0.01, 1, 1]] }),
+  sand_warlord: mk('orc_elite',    { name: '사막 전쟁군주',   hp: 260, atk: 38, speed: 28, xp: 190, gold: [46, 80], tint: SAND, drops: [['gold_ingot', 0.2, 1, 2], ['mithril', 0.06, 1, 1], ['dragon_scale', 0.05, 1, 1]] }),
+  tomb_guard:   mk('frost_war',    { name: '왕릉 수호 기사',  hp: 280, atk: 40, speed: 22, xp: 210, gold: [50, 86], tint: MUMMY, drops: [['bone', 0.8, 3, 5], ['mithril', 0.08, 1, 1], ['primal_shard', 0.015, 1, 1]] }),
+});
+// 보스 (progression.js 의 bossDef · 세트)
+Object.assign(MONSTERS, {
+  fire_giant:   bossDef('orc_war',   { name: '화염 거인 이그니스', hp: 1100, atk: 38, speed: 30, scale: 2.8, xp: 4200, gold: [900, 1500], bossKind: 'dungeon', set: 'chaos', pat: ['dash', 'slam', 'nova', 'volley', 'summon'], minion: 'magma_orc', shot: '#ff7a2a', tint: FIRE,
+                   drops: [['dragon_scale', 1, 3, 6], ['essence', 1, 2, 4], ['primal_shard', 0.5, 1, 1]] }),
+  sand_pharaoh: bossDef('skel_war',  { name: '사막 왕 세크메트',   hp: 1400, atk: 42, speed: 26, scale: 3,   xp: 6000, gold: [1200, 2000], bossKind: 'dungeon', set: 'titan', pat: ['slam', 'nova', 'volley', 'summon', 'dash'], minion: 'tomb_guard', shot: '#ffd060', tint: SAND,
+                   drops: [['primal_shard', 1, 1, 3], ['dragon_scale', 1, 2, 5], ['mithril', 1, 3, 6], ['protect_scroll', 0.4, 1, 1]] }),
+  fb_volcano:   bossDef('orc_elite', { name: '용암 폭군 볼칸',     hp: 800, atk: 34, speed: 34, scale: 2.2, xp: 2400, gold: [500, 800], bossKind: 'field', set: 'flame', pat: ['dash', 'slam', 'nova'], tint: FIRE, drops: [['dragon_scale', 1, 2, 3], ['essence', 0.8, 1, 2]] }),
+  fb_desert:    bossDef('skel_war',  { name: '모래 폭풍 해골왕',   hp: 950, atk: 38, speed: 30, scale: 2.2, xp: 3200, gold: [650, 1000], bossKind: 'field', set: 'frost', pat: ['slam', 'volley', 'summon'], minion: 'sand_skel', shot: '#ffd060', tint: SAND, drops: [['mithril', 1, 2, 4], ['dragon_scale', 0.8, 1, 2]] }),
+});
+for (const k of ['cinder_skel', 'sand_skel', 'mummy_mage', 'tomb_guard', 'sand_pharaoh', 'fb_desert']) MONSTERS[k].undead = true;
+for (const k of ['fire_giant', 'sand_pharaoh', 'fb_volcano', 'fb_desert']) if (!MONSTERS[k].drops.some((d) => d[0] === 'enh_stone')) MONSTERS[k].drops.push(['enh_stone', 1, 2, 5]);
+for (const k of ['magma_orc', 'magma_rogue', 'magma_shaman', 'cinder_skel', 'sand_skel', 'mummy_mage', 'sand_warlord', 'tomb_guard']) MONSTERS[k].drops.push(['enh_stone', 0.08, 1, 1]);
+
+</script>
+<script>
+// =====================================================================
 //  farm_foods.js — 새 작물(토마토 · 감자 · 옥수수 · 호박 · 딸기 · 고추 · 밀 · 수박)로 만드는 요리 · 물약
 //   그림: assets/generated/crops2.png (tools/build_crop_sprites.py) — 요리 그림 y = 256, 항아리 · 물약병은 작물 줄마다
 //   요리 화로(마을 광장 · 집 안 조리대)에서 [농장 요리] · 연금술 테이블에서 [버프 물약]
@@ -8729,7 +8814,7 @@ const ui = {
   /** v60: 일괄 판매 막대 — 등급 이하 장비 · 재료 · 음식 · 골라서 팔기 */
   bulkSellBar(p) {
     const inv = p.inv, box = document.createElement('div'); box.className = 'bulk';
-    const keep = (id) => { const d = ITEMS[id]; return d.set || d.en || d.autoMin || (d.tool && d.atk <= 3) || p.quick.includes(id); };   // 안 파는 것
+    const keep = (id) => { const d = ITEMS[id]; return d.set || d.en || d.autoMin || d.infinite || (d.tool && d.atk <= 3) || p.quick.includes(id); };   // 안 파는 것
     const groups = [
       ['일반 장비', (d, id) => isEquip(id) && (d.grade || 0) <= 0],
       ['고급 이하 장비', (d, id) => isEquip(id) && (d.grade || 0) <= 1],
@@ -9306,11 +9391,12 @@ const ZONE_NAME = {
   town: '평화로운 마을 · 안전 지대', farm: '마을 텃밭 · 안전 지대', homelot: '영지 입구 · 안전 지대', estate: '내 영지 · 안전 지대 (H: 건축)', meadow: '바람 초원 · Lv 1~3', west: '서쪽 늪지 · Lv 3~5',
   forest: '동쪽 숲 · Lv 5~8', grave: '북쪽 묘지 · Lv 7~11', lair: '대족장의 둥지 · Lv 12 보스',
   waste: '붉은 황무지 · Lv 12~16', wastelair: '황무지 군주의 제단 · Lv 19 보스', snow: '얼어붙은 설원 · Lv 15~21', frostlair: '서리 리치의 무덤 · Lv 24 보스',
+  volcano: '🌋 불타는 화산 지대 · Lv 61~71', volcanolair: '🌋 화염 거인의 분화구 · Lv 74 보스', desert: '🏜 고대 사막 유적 · Lv 71~81', ruinlair: '🏜 사막 왕의 피라미드 · Lv 84 보스',
 };
 
 // v49: 장비(무기 · 방어구 · 장신구)와 생활 도구를 뺀 모든 아이템(물약 · 음식 · 재료 · 씨앗 · 주문서 …) 999개까지 겹침
 const EQUIP_TYPES = ['weapon', 'shield', 'helmet', 'armor', 'gloves', 'boots', 'accessory'];
-for (const d of Object.values(ITEMS)) if (d && !EQUIP_TYPES.includes(d.type) && !d.tool) d.stack = 999;
+for (const d of Object.values(ITEMS)) if (d && !EQUIP_TYPES.includes(d.type) && !d.tool && !d.infinite) d.stack = 999;
 // v51: 대장간 레시피 단계 = 재질 (내 모루: 1단계 나무·돌 · 청동 / 2단계 철 · 강철 / 3단계 명품 이상 · 마을 대장간은 3단계라 전부)
 for (const r of RECIPES) if ((r.station || 'smithy') === 'smithy') { const d = ITEMS[r.result], t = d ? (d.ow ? d.ow.tier : d.atier !== undefined ? d.atier : 0) : 0; r.tier = t <= 1 ? 1 : t <= 3 ? 2 : 3; }
 
