@@ -143,7 +143,7 @@ function plotOk(p) {
 }
 const cleanPlot = (p) => ({ tx: p.tx, ty: p.ty, crop: p.crop, stage: p.stage, wet: p.wet, t: Math.round(p.t * 10) / 10, dry: int(p.dry, 0, 9) ? p.dry : 0, dead: !!p.dead });
 
-const roomOk = (r) => (r === undefined || r === '' ? '' : typeof r === 'string' && /^\d{1,3},\d{1,3}$/.test(r) ? r : null);
+const roomOk = (r) => (r === undefined || r === '' ? '' : typeof r === 'string' && /^\d{1,3},\d{1,3}(#[2-6])?$/.test(r) ? r : null);   // '#2' = 2층 …
 function roomList(room) { if (!room) return world.furn; world.rooms = world.rooms || {}; if (Object.keys(world.rooms).length > 200 && !world.rooms[room]) return []; return (world.rooms[room] = world.rooms[room] || []); }
 /** 월드 변경 적용 → 성공하면 방송할 op (못 알아보면 null) */
 function applyOp(op) {

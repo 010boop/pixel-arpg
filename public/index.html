@@ -675,7 +675,7 @@ function enhanceItem(t, k) {
   const base = t[m[1]], n = +m[2];
   if (!base || n < 1 || n > ENH_MAX || !['weapon', 'shield', 'helmet', 'armor', 'boots', 'accessory'].includes(base.type) || base.tlv || (base.tool && base.atk <= 3)) return undefined;
   const d = { ...base, name: `+${n} ${base.name}`, en: n, enBase: m[1], value: Math.round(base.value * (1 + n * 0.3)) };
-  if (base.type === 'weapon') d.atk = Math.round(base.atk * (1 + n * 0.08)) + n;
+  if (base.type === 'weapon') d.atk = Math.round(base.atk * (1 + n * 0.08)) + n * 2;   // v42: 2배 단위
   if (base.stats) { d.stats = {}; for (const [s, v] of Object.entries(base.stats)) d.stats[s] = typeof v === 'number' ? Math.round((v * (1 + n * 0.1) + (s === 'def' || s === 'hp' ? n * (s === 'hp' ? 2 : 0.5) : 0)) * 10) / 10 : v; }
   else if (base.type !== 'weapon') d.stats = { def: Math.ceil(n / 2) };
   t[k] = d; return d;
@@ -1918,7 +1918,19 @@ class Housing {
   get furn() { return this.list(); }
   set furn(v) { this.rooms.set(this.cur, v); }
   /** 방 크기 (집이 클수록 넓음) */
-  roomSize(room = this.cur) { const i = this.info.get(room); return i ? { w: i.w, h: i.h } : HOME_SIZE; }
+  roomSize(room = this.cur) { const i = this.info.get(this.baseRoom(room)); return i ? { w: i.w, h: i.h } : HOME_SIZE; }
+  /** 층: 방 key 'x,y' = 1층 · 'x,y#2' = 2층 … */
+  baseRoom(room = this.cur) { return String(room || '').split('#')[0]; }
+  floorOf(room = this.cur) { const m = /#(\d)$/.exec(room || ''); return m ? +m[1] : 1; }
+  floorsOf(room = this.cur) { const i = this.info.get(this.baseRoom(room)); return (i && i.floors) || 1; }
+  roomAt(floor, room = this.cur) { const b = this.baseRoom(room); return floor > 1 ? `${b}#${floor}` : b; }
+  /** 계단 칸: 올라가는 계단 = 오른쪽 위 · 내려가는 계단 = 왼쪽 위 */
+  stairs(room = this.cur) {
+    const { w } = this.roomSize(room), f = this.floorOf(room), n = this.floorsOf(room), out = [];
+    if (f < n) out.push({ tx: w - 3, ty: 3, to: f + 1, up: true });
+    if (f > 1) out.push({ tx: 2, ty: 3, to: f - 1, up: false });
+    return out;
+  }
   /** 가구 창고의 저장 이름 */
   sk(tx, ty, room = this.cur) { return room ? `r:${room}|${tx},${ty}` : 'i:' + this.key(tx, ty); }
   /** 창고 이름 → 크기 (없어진 상자면 0) */
@@ -2016,12 +2028,13 @@ class Housing {
     for (const [k, id] of this.tiles) {
       if (BUILD_PARTS[id].kind !== 'door') continue;
       const [tx, ty] = k.split(',').map(Number), seen = new Set([k]), stack = [[tx, ty]];
-      let walls = 0, roofs = 0, x0 = tx, x1 = tx, y0 = ty, y1 = ty;
+      let walls = 0, roofs = 0, x0 = tx, x1 = tx, y0 = ty, y1 = ty; const wallRows = new Set();
       const styles = {};
       while (stack.length) {
         const [x, y] = stack.pop(), kind = this.kindAt(x, y), part = BUILD_PARTS[this.partAt(x, y)];
         x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
         if (kind === 'wall' || kind === 'window') walls++;
+        if (kind === 'wall' || kind === 'window' || kind === 'door') wallRows.add(y);
         if (kind === 'roof') roofs++;
         if (kind === 'wall') styles[part.style] = (styles[part.style] || 0) + 1;
         for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -2031,7 +2044,7 @@ class Housing {
       }
       const style = Object.entries(styles).sort((a, b) => b[1] - a[1])[0];
       const fk = this.kindAt(tx, ty + 1), frontFree = !fk || FLAT_KINDS.has(fk);
-      out.push({ tx, ty, key: k, walls, roofs, bw: x1 - x0 + 1, bh: y1 - y0 + 1, complete: walls >= 2 && roofs >= 2 && frontFree, style: style ? style[0] : 'log', frontFree });
+      out.push({ tx, ty, key: k, walls, roofs, bw: x1 - x0 + 1, bh: y1 - y0 + 1, floors: wallRows.size >= 3 ? Math.min(6, wallRows.size) : 1, complete: walls >= 2 && roofs >= 2 && frontFree, style: style ? style[0] : 'log', frontFree });
     }
     return out;
   }
@@ -2043,8 +2056,8 @@ class Housing {
       if (!h.complete) continue;
       const x = h.tx * T + 8, y = (h.ty + 1) * T;
       const size = { w: Math.max(12, Math.min(30, Math.round(h.bw * 2.2) + 2)), h: Math.max(9, Math.min(18, Math.round(h.bh * 1.8) + 3)) };   // 집이 클수록 넓은 실내
-      this.info.set(h.key, { ...size, style: h.style });
-      world.portals.push({ x, y: y + 6, ax: x, ay: y + 8, to: 'home', name: `내 집 (실내 ${size.w - 2}×${size.h - 4})`, reach: 14, home: true, style: h.style, hkey: h.key });
+      this.info.set(h.key, { ...size, style: h.style, floors: h.floors });
+      world.portals.push({ x, y: y + 6, ax: x, ay: y + 8, to: 'home', name: `내 집 (실내 ${size.w - 2}×${size.h - 4}${h.floors > 1 ? ` · ${h.floors}층` : ''})`, reach: 14, home: true, style: h.style, hkey: h.key });
       now.add(this.key(h.tx, h.ty));
     }
     this.migrateLegacyRoom();
@@ -2104,11 +2117,12 @@ class Housing {
       return null;
     }
     if (ty < 3 || ty > h - 2 || tiles.some(([x]) => x < 1 || x > w - 2)) return '바닥 위에만 놓을 수 있어요';
+    if (this.stairs().some((s) => tiles.some(([x, y]) => Math.abs(x - s.tx) <= 1 && (y === s.ty || y === s.ty + 1)))) return '계단 자리예요';
     const same = (f) => (BUILD_PARTS[f[0]].flat || false) === (p.flat || false) && BUILD_PARTS[f[0]].kind === 'furn';
     if (this.furn.some((f) => same(f) && this.furnTiles(...f).some(([x, y]) => tiles.some(([xx, yy]) => xx === x && yy === y)))) return '다른 가구와 겹쳐요';
     if (!p.flat) {
       const door = [(w >> 1) - 1, w >> 1];
-      if (tiles.some(([x, y]) => y === h - 2 && door.includes(x))) return '출입구를 막을 수 없어요';
+      if (this.floorOf() === 1 && tiles.some(([x, y]) => y === h - 2 && door.includes(x))) return '출입구를 막을 수 없어요';
       const ptx = Math.floor(player.x / T), pty = Math.floor((player.y - 2) / T);
       if (tiles.some(([x, y]) => x === ptx && y === pty)) return '캐릭터가 서 있는 칸이에요';
     }
@@ -2123,9 +2137,10 @@ class Housing {
 
   /** "내 집" 실내 맵 만들기 (가구 목록 → Interior) */
   makeInterior(exitTo) {
-    const inf = this.info.get(this.cur), st = WALL_STYLE[(inf && inf.style) || this.homeStyle], { w, h } = this.roomSize();
+    const inf = this.info.get(this.baseRoom()), st = WALL_STYLE[(inf && inf.style) || this.homeStyle], { w, h } = this.roomSize(), fl = this.floorOf(), n = this.floorsOf();
     INTERIORS.home = {
-      name: inf ? `내 집 (${w - 2}×${h - 4})` : '내 집', w, h, floor: st.floor, wall: st.inWall,
+      name: (inf ? `내 집 (${w - 2}×${h - 4})` : '내 집') + (n > 1 ? ` · ${fl}층` : ''), w, h, floor: st.floor, wall: st.inWall,
+      noDoor: fl > 1, stairs: this.stairs(),
       props: this.furn.map(([id, tx, ty]) => { const p = BUILD_PARTS[id]; return [p.prop, tx, ty, p.kind === 'furn' && !p.flat]; }),
       npcs: [],
       uses: this.furn.filter(([id]) => BUILD_PARTS[id].use).map(([id, tx, ty]) => {
@@ -2156,7 +2171,7 @@ class Housing {
       if (BUILD_PARTS[id] && this.inLot(tx, ty)) { this.tiles.set(this.key(tx, ty), id); if (isSolidKind(BUILD_PARTS[id].kind)) world.solid[world.idx(tx, ty)] = 1; }
     }
     for (const f of (o && o.furn) || []) if (BUILD_PARTS[f[0]]) this.list('').push([...f]);
-    for (const [room, L] of Object.entries((o && o.rooms) || {})) if (/^\d+,\d+$/.test(room) && Array.isArray(L)) this.rooms.set(room, L.filter((f) => BUILD_PARTS[f[0]]).map((f) => [...f]));
+    for (const [room, L] of Object.entries((o && o.rooms) || {})) if (/^\d+,\d+(#\d)?$/.test(room) && Array.isArray(L)) this.rooms.set(room, L.filter((f) => BUILD_PARTS[f[0]]).map((f) => [...f]));
     // 제작대 단계 · 넓이
     for (const [k, id] of this.tiles) if (BUILD_PARTS[id].kind === 'station') this.stationLv.set('o:' + k, 1);
     for (const [key, lv] of (o && o.stations) || []) if (this.stationLv.has(key)) this.stationLv.set(key, lv);
@@ -2382,8 +2397,8 @@ const builder = {
   dropLoot(game, l) { l.t = 0.2; game.loot.push(l); },
   /** 가구가 바뀌면 실내 맵을 다시 만듦 (캐릭터 위치 유지) */
   rebuildRoom(game) {
-    const p = game.player, x = p.x, y = p.y, exitTo = game.world.exitTo;
-    game.world = game.housing.makeInterior(exitTo); p.x = x; p.y = y;
+    const p = game.player, x = p.x, y = p.y, exitTo = game.world.exitTo, back = game.world.returnMap;
+    game.world = game.housing.makeInterior(exitTo); game.world.returnMap = back; p.x = x; p.y = y;
   },
 
   // ------------------------------------------------------------ 그리기
@@ -3205,8 +3220,8 @@ Object.assign(SKILL_FX, {
   war_cry: {
     start(p, game) {
       for (const m of nearMonsters(game, p.x, p.y, 70, 99)) { m.stagger = Math.max(m.stagger || 0, 1); game.popText(m.x, m.y - 24, '!', '#ffe070'); }
-      p.addSkillBuff('sk_cry', '전투의 함성', '📣', 8, { atk: Math.round(p.stats.atk * 0.3) + 4 }, game);
-      party.act({ k: 'buff', id: 'cry', name: '전투의 함성', icon: '📣', dur: 8, stats: { atk: Math.round(p.stats.atk * 0.2) + 3 } });
+      p.addSkillBuff('sk_cry', '전투의 함성', '📣', 8, { atk: Math.round(p.stats.atk * 0.15) + 4 }, game);
+      party.act({ k: 'buff', id: 'cry', name: '전투의 함성', icon: '📣', dur: 8, stats: { atk: Math.round(p.stats.atk * 0.1) + 3 } });
       vfx(game, 'cry', { x: p.x, y: p.y, r: 70, dur: 0.6 }, true); game.shake(5); sfx.level();
     },
   },
@@ -3503,7 +3518,7 @@ Object.assign(SKILL_FX, {
       online.act({ k: 'shot', aim: p.aim, n: 1, proj: 'holy', speed: 240, color: '#ffe89a' }); sfx.magic();
     },
   },
-  bless: { start(p, game) { const bs = { atk: Math.round(p.stats.atk * 0.2) + 3, def: 5 }; party.act({ k: 'buff', id: 'bless', name: '축복', icon: '🙏', dur: 15, stats: bs }); p.addSkillBuff('sk_bless', '축복', '🙏', 15, bs, game); vfx(game, 'pillar', { x: p.x, y: p.y, dur: 0.7 }, true); vfx(game, 'holyring', { x: p.x, y: p.y, r: 30, dur: 0.5 }, true); sfx.level(); } },
+  bless: { start(p, game) { const bs = { atk: Math.round(p.stats.atk * 0.1) + 3, def: 5 }; party.act({ k: 'buff', id: 'bless', name: '축복', icon: '🙏', dur: 15, stats: bs }); p.addSkillBuff('sk_bless', '축복', '🙏', 15, bs, game); vfx(game, 'pillar', { x: p.x, y: p.y, dur: 0.7 }, true); vfx(game, 'holyring', { x: p.x, y: p.y, r: 30, dur: 0.5 }, true); sfx.level(); } },
   sanctuary: {
     start(p, game) {
       const x = p.x, y = p.y; vfx(game, 'sanctuary', { x, y, r: 56, dur: 5 }, true); sfx.magic();
@@ -3898,7 +3913,7 @@ class RemotePlayer {
 // =====================================================================
 
 const PARTY_NEAR = 420;                          // "가까이" 거리 (픽셀)
-const PARTY_BUFF_CAP = { atk: 60, def: 20, spd: 40, aspd: 40, crit: 30, regen: 20, hp: 200 };
+const PARTY_BUFF_CAP = { atk: 120, def: 20, spd: 40, aspd: 40, crit: 30, regen: 20, hp: 200 };
 
 const party = {
   info: null, invites: [], open: false,
@@ -4408,7 +4423,8 @@ class Player {
     game.popText(this.x, this.y - 40, statText(stats), '#9ad8ff');
   }
   get maxHp() { return Math.round((60 + (this.pl - 1) * 12) * this.cls.hpMul) + this.stats.hp; }
-  get atk() { return (this.stats.atk + this.pl * 1.2) * this.cls.atkMul; }   // v41: 레벨 몫 1.5 → 1.2 (장비 차이가 더 잘 느껴지게)
+  /** v42: 무기 공격력은 2배 단위 → 반지 · 세트 · 버프의 공격력 · 레벨 몫도 2배로 계산 */
+  get atk() { const s = this.stats, w = (this.weapon && this.weapon.atk) || 0; return (w + (s.atk - w) * 2 + this.pl * 2.4) * this.cls.atkMul; }
   get def() { return this.stats.def + Math.floor(this.pl / 4); }
   get crit() { return 0.05 + this.stats.crit / 100; }
   get speed() { return this.cls.speed * Math.max(0.5, 1 + (this.stats.spd || 0) / 100) * (admin.flags.fast ? 2 : 1); }
@@ -4971,7 +4987,7 @@ class Monster {
     this.x = this.hx = x; this.y = this.hy = y; this.vx = 0; this.vy = 0;
     this.scale = d.scale || 1;
     const pl = this.pl = lvOld(level);                                  // 힘 계산용 레벨 (progression.js)
-    this.maxHp = this.hp = Math.round(d.hp * (1 + (pl - 1) * 0.32) * (1 + Math.max(0, pl - 10) * 0.04));   // v41: Lv30 이후 장비가 세진 만큼 체력 보정
+    this.maxHp = this.hp = Math.round(d.hp * 2 * (1 + (pl - 1) * 0.32) * (1 + Math.max(0, pl - 10) * 0.04));   // v42: 공격력 2배 단위라 체력도 2배 · Lv30 이후 보정
     this.atk = d.atk * (1 + (pl - 1) * 0.22);
     this.bossKind = d.bossKind || (d.boss ? 'dungeon' : null); this.warns = [];
     this.speed = d.speed * (0.9 + Math.random() * 0.2);
@@ -5278,7 +5294,7 @@ class Critter {
     const d = CRITTERS[type];
     this.type = type; this.def = { ...d, heavy: type === 'boar' }; this.level = level; this.name = d.name; this.boss = false; this.critter = true;
     this.x = this.hx = x; this.y = this.hy = y; this.vx = 0; this.vy = 0; this.scale = 1;
-    this.maxHp = this.hp = Math.round(d.hp * (1 + (lvOld(level) - 1) * 0.2));
+    this.maxHp = this.hp = Math.round(d.hp * 2 * (1 + (lvOld(level) - 1) * 0.2));   // v42: 공격력 2배 단위
     this.atk = d.atk * (1 + (lvOld(level) - 1) * 0.2);
     this.state = 'spawn'; this.t = 0; this.dir = Math.random() < 0.5 ? 'left' : 'right';
     this.flash = 0; this.move = null; this.moveT = 1 + Math.random() * 2; this.angry = 0; this.atkCd = 0; this.hopT = 0;
@@ -6633,34 +6649,52 @@ const TIER_MATS = [
 const tierStation = (t, grade) => (t >= 5 || grade >= 3 ? { station: 'workbench', tier: 3 } : { station: 'smithy', tier: 1 });
 
 // ---------------------------------------------------------------- 무기: 착용 레벨 · 공격력 다시 계산 + 미스릴 · 용린 · 태초 무기
+// v42 무기 공격력 = 착용 레벨로 정함 (레벨이 1 오를 때마다 공격력도 오름 · 숫자는 예전의 2배 단위 → 몬스터 체력도 2배)
+//   기준점: Lv1 8 · Lv10 15 · Lv20 23 · Lv30 34 · Lv40 51 · Lv50 76 · Lv60 114 · Lv70 170 · Lv80 256 (사이는 고르게)
+const ATK_KNOTS = [[1, 8], [10, 15], [20, 22.6], [30, 33.8], [40, 50.6], [50, 76], [60, 114], [70, 170], [80, 256]];
+function atkAtLv(lv) {
+  if (lv <= 1) return 8;
+  for (let i = 1; i < ATK_KNOTS.length; i++) { const [a0, b0] = ATK_KNOTS[i - 1], [a1, b1] = ATK_KNOTS[i]; if (lv <= a1) return b0 + (lv - a0) / (a1 - a0) * (b1 - b0); }
+  return 256 * Math.pow(1.041, lv - 80);
+}
+//  동작별 공격력 배율 (같은 동작 무기끼리는 레벨이 높을수록 무조건 셈)
+const MOVE_ATK = { sword: 1, dagger: 0.8, spear: 0.95, heavy: 1.25, bow: 1, xbow: 1.25, staff: 1.1, wand: 0.8, claw: 0.85, scepter: 1, tome: 0.9 };
 (function retierWeapons() {
-  const mulOf = (d) => (d.cw ? CW_TYPES[d.ow.type][2] : OW_TYPES[d.ow.type][3]);
-  const place = (d, t, g, v) => {
-    const T = OW_TIER[Math.min(4, t)], off = Math.max(0, Math.min(9, Math.round((g - T.g0) / Math.max(1, T.gs) * 6) + (v % 3)));
-    const lv = tierStart(t) + (t === 0 ? off : off);
-    d.lv = Math.max(1, Math.min(tierStart(t) + 9, lv));
-    d.atk = Math.max(1, Math.round(TIER_ATK[t] * (1 + off * 0.02) * mulOf(d) * (1 + g * 0.1)));   // 같은 재질 안: 레벨 +2%/Lv · 등급 +10%
-    d.value = Math.round(Math.pow(d.atk, 1.55) * 4 * (1 + g * 0.6));
+  const place = (d, t, g, v) => {           // 레벨은 아래 spread 에서 정함 · 여기선 설명 · 값만
+    d.atk = Math.max(1, Math.round(atkAtLv(d.lv) * (MOVE_ATK[d.moves] || 1)));   // 공격력은 레벨로만 · 등급은 추가 능력치(치명타 · 공속 · 체력 …)
+    d.value = Math.round(Math.pow(d.atk / 2, 1.55) * 4 * (1 + g * 0.6));
     d.desc = `${GRADES[g].name} · ${MAT_NAME[t]} 무기 · 착용 Lv${d.lv}`;
   };
-  for (const id of OW_IDS) { const d = ITEMS[id]; place(d, d.ow.tier, d.grade, d.ow.v); }
+  /** 같은 재질 · 같은 동작 무기들을 등급 순서대로 그 재질의 레벨 구간(10레벨)에 고르게 펼침 */
+  const spread = (ids) => {
+    const groups = {};
+    for (const id of ids) { const d = ITEMS[id]; (groups[d.ow.tier + '|' + d.moves] = groups[d.ow.tier + '|' + d.moves] || []).push(id); }
+    for (const list of Object.values(groups)) {
+      const t = ITEMS[list[0]].ow.tier, lo = tierStart(t), hi = t * 10 + 9;
+      list.sort((a, b) => ITEMS[a].grade - ITEMS[b].grade || ITEMS[a].ow.v - ITEMS[b].ow.v || (a < b ? -1 : 1));
+      list.forEach((id, i) => { const d = ITEMS[id]; d.lv = d.grade >= 4 ? hi : list.length > 1 ? lo + Math.round(i / (list.length - 1) * (hi - lo)) : lo; place(d, t, d.grade, d.ow.v); });
+    }
+  };
+  spread(OW_IDS);
   // 명품(4) 무기를 바탕으로 5 · 6 · 7 단계
-  const top = OW_IDS.filter((id) => ITEMS[id].ow.tier === 4), recipes = [];
+  const top = OW_IDS.filter((id) => ITEMS[id].ow.tier === 4), recipes = [], newIds = [];
   for (const id of top) for (let t = 5; t <= TIER_MAX; t++) {
     const b = ITEMS[id], nid = id + '_t' + t, k = 1 + 0.3 * (t - 4), stats = {};
     for (const [s, v] of Object.entries(b.stats || {})) stats[s] = Math.round(v * k * 10) / 10;
     const d = ITEMS[nid] = { ...b, name: `${MAT_NAME[t]} ${b.name.replace(/^(날렵한|묵직한|예리한|단단한|정교한|피 묻은|빛나는|고대의|저주받은|용맹한) /, '')}`, tint: TIER_TINT[t], ow: { ...b.ow, tier: t }, stats };
-    place(d, t, d.grade, d.ow.v); OW_IDS.push(nid);
+    OW_IDS.push(nid); newIds.push(nid);
     if (d.grade >= 4) continue;
     const mats = {}; for (const [m, q] of Object.entries(TIER_MATS[t])) mats[m] = Math.ceil(q * (1 + d.grade * 0.5));
-    recipes.push({ cat: `${MAT_NAME[t]} 무기`, result: nid, qty: 1, mats, gold: Math.round(d.value * 0.3), owSort: t * 10 + d.grade, ...tierStation(t, 3) });
+    recipes.push({ cat: `${MAT_NAME[t]} 무기`, result: nid, qty: 1, mats, gold: 0, owSort: t * 10 + d.grade, ...tierStation(t, 3) });
   }
+  spread(newIds);
+  for (const r of recipes) r.gold = Math.round(ITEMS[r.result].value * 0.3);
   for (const r of RECIPES) if (ITEMS[r.result] && ITEMS[r.result].ow) { r.gold = Math.round(ITEMS[r.result].value * 0.3); r.cat = r.cat === '영웅 무기' ? r.cat : `${MAT_NAME[ITEMS[r.result].ow.tier]} 무기`; }
   recipes.sort((a, b) => a.owSort - b.owSort || ITEMS[a.result].atk - ITEMS[b.result].atk);
   RECIPES.push(...recipes);
   // 예전 무기(나무 검 · 뼈 도끼 …)도 공격력에 맞는 착용 레벨
-  const lvForAtk = (a) => { for (let t = 0; t <= TIER_MAX; t++) if (a < TIER_ATK[t + 1]) return Math.max(1, Math.round(tierStart(t) + (a - TIER_ATK[t]) / (TIER_ATK[t + 1] - TIER_ATK[t]) * 10)); return 80; };
-  for (const [id, d] of Object.entries(ITEMS)) if (d.type === 'weapon' && !d.ow && !d.lv && !(d.tool && d.atk <= 3)) d.lv = lvForAtk(d.atk * 0.9);
+  const lvForAtk = (a) => { for (let lv = 1; lv <= 90; lv++) if (atkAtLv(lv) >= a) return lv; return 90; };
+  for (const [id, d] of Object.entries(ITEMS)) if (d.type === 'weapon' && !d.ow && !(d.tool && d.atk <= 3)) { d.atk *= 2; if (!d.lv) d.lv = lvForAtk(d.atk * 0.9); }   // v42: 공격력 2배 단위
 })();
 
 // ---------------------------------------------------------------- 방어구: 재질 × 부위 × 2종
@@ -6704,6 +6738,15 @@ function armorStats(slot, t, off, boost = 1) {
     copper_ring: 3, silver_ring: 14, mana_amulet: 24, life_charm: 20, wood_shield: 1, round_shield: 6, kite_shield: 14, bone_shield: 20, tower_shield: 30, legend_shield: 40 };
   for (const [id, lv] of Object.entries(OLD_LV)) if (ITEMS[id] && !ITEMS[id].lv) ITEMS[id].lv = lv;
   for (const [id, d] of Object.entries(ITEMS)) if (isEquip(id) && d.type !== 'weapon' && !d.lv && d.stats) { const s = d.stats, pow = (s.def || 0) * 2 + (s.hp || 0) / 5 + (s.atk || 0) * 2 + (s.crit || 0) / 2; d.lv = Math.max(1, Math.min(60, Math.round(pow * 1.6))); }
+})();
+
+// v42 제작 목록: 무기 · 방어구를 착용 레벨 순서로 (다른 레시피 자리는 그대로)
+(function sortGearRecipes() {
+  const gear = (r) => ITEMS[r.result] && (ITEMS[r.result].ow || ITEMS[r.result].atier !== undefined);
+  const idx = [], list = [];
+  RECIPES.forEach((r, i) => { if (gear(r)) { idx.push(i); list.push(r); } });
+  list.sort((a, b) => ITEMS[a.result].lv - ITEMS[b.result].lv || ITEMS[a.result].grade - ITEMS[b.result].grade || (ITEMS[a.result].atk || 0) - (ITEMS[b.result].atk || 0));
+  idx.forEach((i, k) => { RECIPES[i] = list[k]; });
 })();
 
 // ---------------------------------------------------------------- 세트 아이템 (보스 드롭만)
@@ -6935,7 +6978,7 @@ class Interior extends TileMap {
     this.id = id; this.def = d; this.name = d.name; this.exitTo = exitTo; this.isInterior = true;   // exitTo = 필드로 돌아갈 위치 {x, y}
     // 벽: 위 3줄, 양옆 1줄, 아래 1줄 (가운데 문 2칸은 뚫림)
     for (let ty = 0; ty < d.h; ty++) for (let tx = 0; tx < d.w; tx++) {
-      const door = ty === d.h - 1 && (tx === (d.w >> 1) - 1 || tx === d.w >> 1);
+      const door = !d.noDoor && ty === d.h - 1 && (tx === (d.w >> 1) - 1 || tx === d.w >> 1);
       if (ty < 3 || tx === 0 || tx === d.w - 1 || (ty === d.h - 1 && !door)) this.solid[this.idx(tx, ty)] = 1;
     }
     for (const [name, tx, ty, block] of d.props) {
@@ -6947,8 +6990,23 @@ class Interior extends TileMap {
     for (const n of this.npcs) this.solid[this.idx(Math.floor(n.x / T), Math.floor(n.y / T))] = 1;
     this.uses = (d.uses || []).map((u) => ({ ...u, x: u.tx * T + 8, y: u.ty * T + 12, ax: u.tx * T + 8, ay: u.ty * T + 26, reach: 16 }));
     // 아래쪽 문 = 나가는 포탈
-    this.portals.push({ x: (d.w >> 1) * T, y: d.h * T - 4, ax: (d.w >> 1) * T, ay: d.h * T - 6, exit: true, name: '밖으로 나가기', reach: 14 });
+    if (!d.noDoor) this.portals.push({ x: (d.w >> 1) * T, y: d.h * T - 4, ax: (d.w >> 1) * T, ay: d.h * T - 6, exit: true, name: '밖으로 나가기', reach: 14 });
+    for (const s of d.stairs || []) this.portals.push({ x: s.tx * T + 8, y: (s.ty + 1) * T + 4, ax: s.tx * T + 8, ay: (s.ty + 1) * T + 8, floorTo: s.to, up: s.up, name: s.up ? `${s.to}층으로 올라가기` : `${s.to}층으로 내려가기`, reach: 16 });
     this.paint();
+  }
+  /** 나무 계단 (위층 = 벽 속으로 올라감 · 아래층 = 바닥 구멍으로 내려감) — 3칸 폭 · 2칸 높이 */
+  drawStairs(g, s) {
+    const x = (s.tx - 1) * T, y = (s.ty - 1) * T, W = 3 * T, H = 3 * T;
+    if (s.up) {
+      g.fillStyle = '#2a1c10'; g.fillRect(x + 4, y, W - 8, H);
+      for (let i = 0; i < 6; i++) { const yy = y + H - (i + 1) * 8; g.fillStyle = i % 2 ? '#8a5a30' : '#9a6a3a'; g.fillRect(x + 4, yy, W - 8, 8); g.fillStyle = `rgba(0,0,0,${0.08 * i})`; g.fillRect(x + 4, yy, W - 8, 8); g.fillStyle = '#5a3a1c'; g.fillRect(x + 4, yy + 7, W - 8, 1); }
+      g.fillStyle = '#4a3018'; g.fillRect(x + 2, y, 3, H); g.fillRect(x + W - 5, y, 3, H);
+    } else {
+      g.fillStyle = '#120c08'; g.fillRect(x + 4, y + T, W - 8, H - T);
+      for (let i = 0; i < 4; i++) { const yy = y + T + i * 8; g.fillStyle = `rgba(138,90,48,${1 - i * 0.22})`; g.fillRect(x + 6 + i, yy, W - 12 - i * 2, 6); }
+      g.fillStyle = '#4a3018'; g.fillRect(x + 2, y + T, 3, H - T); g.fillRect(x + W - 5, y + T, 3, H - T); g.fillRect(x + 2, y + T, W - 4, 2);
+    }
+    g.fillStyle = '#ffe8b0'; g.font = 'bold 7px sans-serif'; g.textAlign = 'center'; g.fillText(s.up ? `▲ ${s.to}층` : `▼ ${s.to}층`, x + W / 2, y + (s.up ? 8 : T + 30));
   }
   propRect(name) { return IN_PROP[name] || IN_STATION[name].slice(1); }
   zoneOfPos() { return 'indoor'; }
@@ -6971,10 +7029,12 @@ class Interior extends TileMap {
     g.fillStyle = sh; g.fillRect(T, 3 * T, c.width - 2 * T, 10);
     g.fillStyle = '#1a1410'; g.fillRect(0, 0, T, c.height); g.fillRect(c.width - T, 0, T, c.height);
     const doorL = ((d.w >> 1) - 1) * T;
-    g.fillRect(0, c.height - T + 6, doorL, T); g.fillRect(doorL + 2 * T, c.height - T + 6, c.width, T);
+    if (d.noDoor) g.fillRect(0, c.height - T + 6, c.width, T);
+    else { g.fillRect(0, c.height - T + 6, doorL, T); g.fillRect(doorL + 2 * T, c.height - T + 6, c.width, T); }
     g.fillStyle = '#6a4a2a'; g.fillRect(T - 2, 3 * T - 4, 2, c.height); g.fillRect(c.width - T, 3 * T - 4, 2, c.height);
     // 출입구 매트
-    g.fillStyle = '#7a2a1a'; g.fillRect(doorL + 3, c.height - T - 2, 2 * T - 6, 8); g.fillStyle = '#c8a050'; g.fillRect(doorL + 5, c.height - T, 2 * T - 10, 1);
+    if (!d.noDoor) { g.fillStyle = '#7a2a1a'; g.fillRect(doorL + 3, c.height - T - 2, 2 * T - 6, 8); g.fillStyle = '#c8a050'; g.fillRect(doorL + 5, c.height - T, 2 * T - 10, 1); }
+    for (const s of d.stairs || []) this.drawStairs(g, s);
     // 바닥에 까는 소품 (러그 등)
     const pr = assets.get(SHEETS.int);
     for (const o of this.objects) if (o.flat && pr && o.inprop.startsWith('rug')) { const r = IN_PROP[o.inprop]; g.drawImage(pr, r[0], r[1], r[2], r[3], Math.round(o.x - r[2] / 2), Math.round(o.y - r[3] / 2), r[2], r[3]); }
@@ -8303,11 +8363,22 @@ class Game {
   enterInterior(portal) {
     this.transition(() => {
       const exitTo = { x: portal.ax, y: portal.ay + 6 };
-      if (portal.to === 'home') this.housing.cur = portal.hkey || '';          // 들어간 집의 방
+      if (portal.to === 'home') this.housing.cur = portal.hkey || '';          // 들어간 집의 방 (1층)
       const room = portal.to === 'home' ? this.housing.makeInterior(exitTo) : new Interior(portal.to, exitTo);
       room.returnMap = this.world;                                           // 나가면 들어온 맵으로 (필드 / 영지)
       const ex = room.portals[0]; this.switchMap(room, ex.x, ex.y - 16, 'up');
       this.log(`${room.name}에 들어왔습니다`, '#ffe8b0');
+    });
+  }
+  /** 집 안 계단: 다른 층으로 (층마다 가구 따로) */
+  changeFloor(to) {
+    const h = this.housing, from = h.floorOf(), exitTo = this.world.exitTo, back = this.world.returnMap;
+    this.transition(() => {
+      h.cur = h.roomAt(to);
+      const room = h.makeInterior(exitTo); room.returnMap = back;
+      const arrive = room.portals.find((q) => q.floorTo === from) || room.portals[0];   // 올라왔으면 내려가는 계단 옆에
+      this.switchMap(room, arrive.x + (arrive.up ? -20 : 20), arrive.ay + 6, 'down');
+      this.log(`🏠 ${to}층 — ${room.name}`, '#ffe8b0'); sfx.door();
     });
   }
   /** 내 영지로 (필드의 영지 입구) */
@@ -8375,7 +8446,7 @@ class Game {
     let best = null, bd = 26;
     for (const n of this.npcs) { const d = Math.hypot(n.x - p.x, n.y - p.y); if (d < bd) { bd = d; best = { type: 'talk', obj: n, label: `${n.name}와 대화` }; } }
     if (best) return best;
-    const pt = w.portalAt(p.x, p.y, 16); if (pt) return { type: 'enter', obj: pt, label: pt.exit ? '밖으로 나가기' : `들어가기 · ${pt.name}` };
+    const pt = w.portalAt(p.x, p.y, 16); if (pt) return { type: 'enter', obj: pt, label: pt.exit ? '밖으로 나가기' : pt.floorTo ? pt.name : `들어가기 · ${pt.name}` };
     for (const u of w.uses || []) if (Math.hypot(u.ax - p.x, u.ay - p.y) < 20) return { type: 'use', obj: u, label: u.name };
     if (this.farmNow && p.farming) {                           // 텃밭: 삽 · 물뿌리개를 들었을 때만 (바라보는 칸 → 서 있는 칸)
       const f = this.bestFarmTile(p);
@@ -8393,6 +8464,7 @@ class Game {
   interactWith(type, obj) {
     const p = this.player;
     if (type === 'talk') obj.talk(this);
+    else if (type === 'enter' && obj.floorTo) this.changeFloor(obj.floorTo);
     else if (type === 'enter') obj.exit ? this.exitInterior() : obj.to === 'estate' ? this.enterEstate(obj) : this.enterInterior(obj);
     else if (type === 'use' && obj.type === 'storage') ui.openStorage(obj.key, obj.name);
     else if (type === 'use' && obj.type === 'bed') this.rest();
